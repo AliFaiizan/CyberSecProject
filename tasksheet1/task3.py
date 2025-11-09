@@ -6,11 +6,11 @@ import hashlib
 from typing import List, Tuple
 
 # File paths and column definitions
-hai_21_train_files = sorted(glob("../hai-21.03/train*.csv"))
-hai_21_test_files = sorted(glob("../hai-21.03/test*.csv"))
+hai_21_train_files = sorted(glob("../hai-21.03/train1.csv"))
+hai_21_test_files = sorted(glob("../hai-21.03/test1.csv"))
 hai_21_attack_cols = ['attack', 'attack_P1', 'attack_P2', 'attack_P3']
 
-print(f"Found {len(hai_21_train_files)} training files: {hai_21_train_files}")
+print(f"Found {len(hai_21_train_files)} training files: {hai_21_train_files}")  
 print(f"Found {len(hai_21_test_files)} test files: {hai_21_test_files}")
 
 class BloomFilter:
@@ -45,6 +45,25 @@ def load_and_clean_data(train_files: List[str], test_files: List[str]) -> Tuple[
     - Remove rows where Attack == 1 (use only normal data for training)
     """
     print("\n=== Step 1: Loading & Cleaning Data ===")
+    features = [
+        'P1_PCV01Z', 'P1_PCV02Z',
+    'P1_FCV01Z', 'P1_FCV02Z', 'P1_FCV03Z',
+    'P1_LCV01Z',
+    'P1_PP01AR', 'P1_PP01BR', 'P1_PP02R',
+    'P2_SIT01',
+    'P3_FIT01', 'P3_LIT01',
+    'P4_ST_GOV',
+    #sensor
+    'P1_TIT01', 'P1_TIT02',
+    'P1_PIT01', 'P1_PIT02',
+    'P1_LIT01',
+    'P1_FT01', 'P1_FT02', 'P1_FT03',
+    'P3_FIT01', 'P3_LIT01', 'P3_PIT01',
+    'P2_SIT01', 'P2_VT01',
+    'P4_HT_FD', 'P4_HT_PO', 'P4_HT_PS',
+    'P4_ST_FD', 'P4_ST_PO', 'P4_ST_PS',
+    'P4_ST_TT01', 'P4_ST_PT01', 'P4_ST_LD', 'P4_LD'
+    ]
     
     # Load training data
     train_dfs = []
@@ -73,18 +92,18 @@ def load_and_clean_data(train_files: List[str], test_files: List[str]) -> Tuple[
     test_df = pd.concat(test_dfs, ignore_index=True)
     
     # Drop timestamp and attack columns
-    cols_to_drop = ['timestamp'] + [col for col in hai_21_attack_cols if col in train_df.columns]
+    cols_to_drop = ['time'] + [col for col in hai_21_attack_cols if col in train_df.columns]
     train_df = train_df.drop(columns=cols_to_drop, errors='ignore')
     test_df = test_df.drop(columns=cols_to_drop, errors='ignore')
     
     print(f"Final training data shape: {train_df.shape}")
-    print(f"Final test data shape: {test_df.shape}")
+    print(f"Final test data shape: {test_df.shape}") 
     
     # Handle NaN values
     train_df = train_df.fillna(method='ffill').fillna(0)
     test_df = test_df.fillna(method='ffill').fillna(0)
-    
-    return train_df, test_df
+
+    return train_df[features], test_df[features]
 
 def normalize_and_quantize(train_data: pd.DataFrame, test_data: pd.DataFrame, Q: int = 20) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -93,7 +112,8 @@ def normalize_and_quantize(train_data: pd.DataFrame, test_data: pd.DataFrame, Q:
     - Quantize into discrete bins (0 to Q-1)
     """
     print(f"\n=== Step 2: Normalizing & Quantizing (Q={Q}) ===")
-    
+    # Round all values before normalization
+
     # Calculate z-score normalization parameters from training data only
     mean_vals = train_data.mean()
     std_vals = train_data.std()
@@ -155,7 +175,7 @@ def build_state_strings(quantized_data: np.ndarray) -> List[str]:
 
 def generate_ngrams(state_strings: List[str], n: int = 3) -> List[str]:
     """
-    Step 4: Generate N-grams
+    Generate N-grams
     Slide a window of size n over the sequence of state strings
     """
     print(f"\n=== Step 4: Generating {n}-grams ===")
@@ -174,10 +194,10 @@ def generate_ngrams(state_strings: List[str], n: int = 3) -> List[str]:
 
 def train_bloom_filter(ngrams: List[str], M: int = 1_000_000, k: int = 5) -> BloomFilter:
     """
-    Step 5: Hash and Store in Bloom Filter
+    Hash and Store in Bloom Filter
     Train the bloom filter with normal n-grams
     """
-    print(f"\n=== Step 5: Training Bloom Filter (M={M}, k={k}) ===")
+    print(f"\n=== Training Bloom Filter (M={M}, k={k}) ===")
     
     bloom = BloomFilter(size=M, k=k)
     
@@ -209,24 +229,28 @@ def detect_anomalies(test_ngrams: List[str], bloom_filter: BloomFilter) -> Tuple
 # Main execution
 if __name__ == "__main__":
     print("=== HAI 21.03 N-gram Anomaly Detection ===")
-    
+    n = 3  # n-gram order
+    k = 2
+    M = 100_000
+    Q = 20
     # Step 1: Load and clean data
     train_df, test_df = load_and_clean_data(hai_21_train_files, hai_21_test_files)
     
     # Step 2: Normalize and quantize
-    train_quantized, test_quantized = normalize_and_quantize(train_df, test_df, Q=20)
+    train_quantized, test_quantized = normalize_and_quantize(train_df, test_df, Q=Q)
     
+    print(train_quantized.head())
     # Step 3: Build state strings
-    train_states = build_state_strings(train_quantized)
-    test_states = build_state_strings(test_quantized)
+    train_states = build_state_strings(train_quantized.values) 
+    test_states = build_state_strings(test_quantized.values)
     
     # Step 4: Generate n-grams
-    n = 3  # n-gram order
+    
     train_ngrams = generate_ngrams(train_states, n)
     test_ngrams = generate_ngrams(test_states, n)
     
     # Step 5: Train bloom filter
-    bloom_filter = train_bloom_filter(train_ngrams, M=1_000_000, k=5)
+    bloom_filter = train_bloom_filter(train_ngrams, M=M, k=k)
     
     # Detect anomalies
     anomalies, anomaly_rate = detect_anomalies(test_ngrams, bloom_filter)
@@ -235,9 +259,9 @@ if __name__ == "__main__":
     print(f"Training samples: {len(train_df)}")
     print(f"Test samples: {len(test_df)}")
     print(f"N-gram order: {n}")
-    print(f"Quantization levels: 20")
-    print(f"Bloom filter size: 1,000,000 bits")
-    print(f"Hash functions: 5")
+    print(f"Quantization levels:",Q)
+    print(f"Bloom filter size: {M} bits")
+    print(f"Hash functions:",k)
     print(f"Anomaly rate: {anomaly_rate:.4f}")
     
     # Save results
