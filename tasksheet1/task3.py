@@ -24,7 +24,7 @@ class BloomFilter:
     def _hashes(self, item: str) -> List[int]:
         """Generate k hash values for an item"""
         return [
-            int(hashlib.sha1((str(seed) + item).encode()).hexdigest(), 16) % self.size
+            int(hashlib.sha1((str(seed) + item).encode()).hexdigest(), 16) % self.size # c4a
             for seed in range(self.k)
         ]
     
@@ -210,27 +210,45 @@ def train_bloom_filter(ngrams: List[str], M: int = 1_000_000, k: int = 5) -> Blo
     print(f"Bloom filter training completed!")
     return bloom
 
-def detect_anomalies(test_ngrams: List[str], bloom_filter: BloomFilter) -> Tuple[List[bool], float]:
+def detect_anomalies(
+    test_ngrams: List[str],
+    bloom_filter: BloomFilter,
+    n: int,
+    threshold: float = None
+) -> Tuple[List[float], List[bool], float]:
     """
-    Detect anomalies using the trained bloom filter
+    Detect anomalies using trained Bloom filter
+    Returns:
+        scores: anomaly scores per n-gram window (N_new / n)
+        labels: anomaly label (True = anomaly) based on threshold
+        anomaly_rate: overall anomaly rate
     """
     print(f"\n=== Anomaly Detection ===")
-    
-    anomaly_scores = []
-    for ngram in test_ngrams:
-        is_normal = bloom_filter.check(ngram)
-        anomaly_scores.append(not is_normal)  # Anomaly if not in bloom filter
-    
-    anomaly_rate = sum(anomaly_scores) / len(anomaly_scores)
-    print(f"Anomaly rate: {anomaly_rate:.4f} ({sum(anomaly_scores)}/{len(anomaly_scores)})")
-    
-    return anomaly_scores, anomaly_rate
+
+    scores = []
+    for i in range(len(test_ngrams) - n):
+        window = test_ngrams[i:i+n]
+        unseen = sum(not bloom_filter.check(g) for g in window)
+        score = unseen / n
+        scores.append(score)
+
+    # Compute threshold if not provided (using 3σ rule from normal-like training behavior)
+    if threshold is None:
+        mu, sigma = np.mean(scores), np.std(scores)
+        threshold = mu + 2 * sigma
+        print(f"Auto threshold (mean + 3σ): {threshold:.4f}")
+
+    labels = [s > threshold for s in scores]
+    anomaly_rate = sum(labels) / len(labels)
+
+    print(f"Anomaly rate: {anomaly_rate:.4f} ({sum(labels)}/{len(labels)})")
+    return scores, labels, anomaly_rate
 
 # Main execution
 if __name__ == "__main__":
     print("=== HAI 21.03 N-gram Anomaly Detection ===")
     n = 3  # n-gram order
-    k = 2
+    k = 3
     M = 100_000
     Q = 20
     # Step 1: Load and clean data
@@ -253,7 +271,7 @@ if __name__ == "__main__":
     bloom_filter = train_bloom_filter(train_ngrams, M=M, k=k)
     
     # Detect anomalies
-    anomalies, anomaly_rate = detect_anomalies(test_ngrams, bloom_filter)
+    test_scores, anomalies, anomaly_rate = detect_anomalies(test_ngrams, bloom_filter, n=n)
     
     print(f"\n=== Summary ===")
     print(f"Training samples: {len(train_df)}")
