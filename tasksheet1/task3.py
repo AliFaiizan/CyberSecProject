@@ -45,25 +45,6 @@ def load_and_clean_data(train_files: List[str], test_files: List[str]) -> Tuple[
     - Remove rows where Attack == 1 (use only normal data for training)
     """
     print("\n=== Step 1: Loading & Cleaning Data ===")
-    features = [
-        'P1_PCV01Z', 'P1_PCV02Z',
-    'P1_FCV01Z', 'P1_FCV02Z', 'P1_FCV03Z',
-    'P1_LCV01Z',
-    'P1_PP01AR', 'P1_PP01BR', 'P1_PP02R',
-    'P2_SIT01',
-    'P3_FIT01', 'P3_LIT01',
-    'P4_ST_GOV',
-    #sensor
-    'P1_TIT01', 'P1_TIT02',
-    'P1_PIT01', 'P1_PIT02',
-    'P1_LIT01',
-    'P1_FT01', 'P1_FT02', 'P1_FT03',
-    'P3_FIT01', 'P3_LIT01', 'P3_PIT01',
-    'P2_SIT01', 'P2_VT01',
-    'P4_HT_FD', 'P4_HT_PO', 'P4_HT_PS',
-    'P4_ST_FD', 'P4_ST_PO', 'P4_ST_PS',
-    'P4_ST_TT01', 'P4_ST_PT01', 'P4_ST_LD', 'P4_LD'
-    ]
     
     # Load training data
     train_dfs = []
@@ -103,7 +84,7 @@ def load_and_clean_data(train_files: List[str], test_files: List[str]) -> Tuple[
     train_df = train_df.fillna(method='ffill').fillna(0)
     test_df = test_df.fillna(method='ffill').fillna(0)
 
-    return train_df[features], test_df[features]
+    return train_df, test_df
 
 def normalize_and_quantize(train_data: pd.DataFrame, test_data: pd.DataFrame, Q: int = 20) -> Tuple[np.ndarray, np.ndarray]:
     """
