@@ -71,11 +71,11 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
 
 def normalize(train_data: pd.DataFrame, test_data: pd.DataFrame, Q: int = None) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Step 2: Normalize & Quantize
-    - Use z-score normalization instead of min-max
+    Normalize & Quantize
+    - Use z-score normalization 
     - Quantize into discrete bins (0 to Q-1)
     """
-    print(f"\n=== Step 2: Normalizing & Quantizing (Q={Q}) ===")
+    print(f"\n===Normalizing & Quantizing (Q={Q}) ===")
     # Round all values before normalization
 
     # Calculate z-score normalization parameters from training data only
@@ -151,14 +151,29 @@ def compute_common_states(train_df: pd.DataFrame, test_df: pd.DataFrame, actuato
     Quantize actuator values into discrete steps and find common states
     """
     print("\n=== Computing Common States ===")
-    a_train_df = train_df.copy()
-    a_test_df = test_df.copy()
 
     # convert each row into a tuple and store in a Python set (which keeps only unique combinations)
-    train_s = set(tuple(row) for row in a_train_df[actuator_cols].to_numpy())
-    test_s = set(tuple(row) for row in a_test_df[actuator_cols].to_numpy())
+    train_s = set(tuple(row) for row in train_df[actuator_cols].to_numpy())
+    test_s = set(tuple(row) for row in test_df[actuator_cols].to_numpy())
 
     common_states = train_s & test_s
     print(len(train_s), len(test_s))
     print(f"Common states: {len(common_states)}")
     return train_s, test_s, list(common_states)
+
+
+def quantize_valves(df, valve_cols, ignore=[], step=10):
+    cols_to_quantize = [col for col in valve_cols if col not in ignore]
+    df[cols_to_quantize] = df[cols_to_quantize].clip(lower=0, upper=100)
+    df[cols_to_quantize] = df[cols_to_quantize].apply(lambda x: (x / step).round() * step)
+    return df
+
+def compute_ccdf(values):
+    values = sorted(values)
+    N = len(values)
+    x = []
+    y = []
+    for i, v in enumerate(values, start=1):
+        x.append(v)
+        y.append(1 - i / N)
+    return x, y
