@@ -63,7 +63,7 @@ plt.bar(range(len(ks_statistics_without_states)), list(ks_statistics_without_sta
 plt.xticks(range(len(ks_statistics_without_states)), list(ks_statistics_without_states.keys()), rotation=90)
 plt.ylabel("K–S statistic (22.04_train vs 22.04_test)")
 plt.tight_layout()
-plt.savefig('ks_statistics_without_states.png', dpi=300, bbox_inches='tight')
+plt.savefig('22.04-ks_without_states.png', dpi=300, bbox_inches='tight')
 
 a_train_df = train_df.copy()
 a_test_df = test_df.copy()
@@ -135,15 +135,15 @@ test_sensor_data_df = pd.concat(all_test_sensor_rows, ignore_index=True)
 print(f"Train shape: {train_sensor_data_df.shape}")
 print(f"Test shape: {test_sensor_data_df.shape}")
 
-ks_statistic_with_states = compare_datasets(train_sensor_data_df[sensor_cols], test_sensor_data_df[sensor_cols])
+ks_statistics_with_states = compare_datasets(train_sensor_data_df[sensor_cols], test_sensor_data_df[sensor_cols])
 
-plt.bar(range(len(ks_statistics_without_states)), list(ks_statistics_without_states.values()))
-plt.xticks(range(len(ks_statistics_without_states)), list(ks_statistics_without_states.keys()), rotation=90)
+plt.bar(range(len(ks_statistics_with_states)), list(ks_statistics_with_states.values()))
+plt.xticks(range(len(ks_statistics_with_states)), list(ks_statistics_with_states.keys()), rotation=90)
 plt.ylabel("K–S statistic (22.04_train vs 21.04_test)")
 plt.tight_layout()
-plt.savefig('ks_statistics_with_states.png', dpi=300, bbox_inches='tight')
+plt.savefig('22_ks_statistics_with_states.png', dpi=300, bbox_inches='tight')
 
-x1, y1 = compute_ccdf(list(ks_statistic_with_states.values()))
+x1, y1 = compute_ccdf(list(ks_statistics_with_states.values()))
 x2, y2 = compute_ccdf(list(ks_statistics_without_states.values()))
 
 plt.figure(figsize=(7,5))

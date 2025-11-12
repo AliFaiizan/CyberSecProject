@@ -2,61 +2,51 @@ import pandas as pd
 from glob import glob
 import matplotlib.pyplot as plt
 import numpy as np
-from utils import load_and_clean_data, normalize 
+from typing import List, Tuple
+from utils import load_and_clean_data,normalize 
 from utils import compare_datasets , compute_common_states , quantize_valves, compute_ccdf
 
-
 sensor_cols = [
-    # Boiler Process (P1)
-    'P1_FT01',  # Measured flowrate of the return water tank
-    'P1_FT02',  # Measured flowrate of the heating water tank
-    'P1_FT03',  # Measured flowrate of the return water tank
-    'P1_PIT01', # Heat-exchanger outlet pressure
-    'P1_PIT02', # Water supply pressure of the heating water pump
-    'P1_LIT01', # Water level of the return water tank
-    'P1_TIT01', # Heat-exchanger outlet temperature
-    'P1_TIT02', # Temperature of the heating water tank
-
-    # Turbine Process (P2)
-    'P2_SIT01',    # Current turbine RPM measured by speed probe
-    'P2_VT01',     # Phase lag signal of key phasor probe
-
-    # Water Treatment Process (P3)
-    'P3_FIT01',    # Flow rate of water into upper water tank
-    'P3_LIT01',    # Water level of upper water tank
-    'P3_PIT01',    # Pressure of water into upper water tank
-
-    # HIL Simulation / Power Model (P4)
-    'P4_HT_FD',    # Frequency deviation of hydro turbine model (HTM)
-    'P4_HT_LD',    # Electrical load demand of HTM
-    'P4_HT_PO',    # Output power of HTM
-    'P4_HT_PS',    # Scheduled power demand of HTM
-    'P4_ST_FD',    # Frequency deviation of steam turbine model (STM)
-    'P4_ST_LD',    # Electrical load demand of STM
-    'P4_ST_PO',    # Output power of STM
-    'P4_ST_PS',    # Scheduled power demand of STM
-    'P4_ST_PT01',  # Digital value of steam pressure of STM
-    'P4_ST_TT01',  # Digital value of steam temperature of STM
+    # Flow transmitters + converted rates
+    "DM-FT01", "DM-FT01Z",
+    "DM-FT02", "DM-FT02Z",
+    "DM-FT03", "DM-FT03Z",
+    # Level
+    "DM-LIT01",
+    # Pressure
+    "DM-PIT01", "DM-PIT02",
+    # Temperatures (main/heat tanks)
+    "DM-TIT01", "DM-TIT02",
+    # Tank temperatures & extra pressure
+    "DM-TWIT-03", "DM-TWIT-04", "DM-TWIT-05",
+    "DM-PWIT-03",
+    #"DM-LSH-03",
+    #"DM-LSH-04",
+    #"DM-LSH01",
+    #"DM-LSH02",
+    #"DM-LSL-04", 
+    #"DM-LSL01", 
+    #"DM-LSL02"
 ]
 actuators =  [
-    'P1_FCV01Z',  # Feedback position of Flow Control Valve 01 (0–100 %)
-    'P1_FCV02Z',  # Feedback position of Flow Control Valve 02 (0–100 %)
-    'P1_FCV03Z',  # Feedback position of Flow Control Valve 03 (0–100 %)
-    'P1_LCV01Z',  # Feedback position of Level Control Valve 01 (0–100 %)
-    'P1_PCV01Z',  # Feedback position of Pressure Control Valve 01 (0–100 %)
-    'P1_PCV02Z',  # Feedback position of Pressure Control Valve 02 (0–100 %)
-    'P1_PP01AR',  # Running status of main pump PP01A (0/1)
-    'P1_PP01BR',  # Running status of standby pump PP01B (0/1)
-    'P1_PP02R'    # Running status of heating-water pump PP02 (0/1)
+    "DM-FCV01-Z", "DM-FCV02-Z", "DM-FCV03-Z",
+    "DM-LCV01-Z",
+    "DM-PCV01-Z", "DM-PCV02-Z",
+
+    "DM-PP01A-R",  # main pump A running
+    "DM-PP01B-R",  # main pump B running
+    "DM-PP02-R",    # heating-water pump running
+
+    "DM-PP04-AO"   # cooling water pump speed (Hz)
 ]
 
-train_files = sorted(glob("../hai-21.03/train*.csv"))
-test_files = sorted(glob("../hai-21.03/test*.csv"))
+train_files = sorted(glob("../haiend-23.05/end-train*.csv"))
+test_files = sorted(glob("../haiend-23.05/end-test*.csv"))
+label_files = sorted(glob("../haiend-23.05/label-test*.csv"))
 
-attack_cols = ['attack', 'attack_P1', 'attack_P2', 'attack_P3']
 
 
-train_df, test_df = load_and_clean_data(train_files, test_files, attack_cols)
+train_df, test_df = load_and_clean_data(train_files, test_files, attack_cols=None, label_files=label_files)
 
 # return normalized sensors only
 train_normalized, test_normalized = normalize(train_df[sensor_cols], test_df[sensor_cols])
@@ -67,17 +57,17 @@ ks_statistics_without_states = compare_datasets(train_normalized, test_normalize
 
 plt.bar(range(len(ks_statistics_without_states)), list(ks_statistics_without_states.values()))
 plt.xticks(range(len(ks_statistics_without_states)), list(ks_statistics_without_states.keys()), rotation=90)
-plt.ylabel("K–S statistic (21.03_train vs 21.03_test)")
+plt.ylabel("K–S statistic (end23_train vs end23_test)")
 plt.tight_layout()
-plt.savefig('21_ks_statistics_without_states.png', dpi=300, bbox_inches='tight')
+plt.savefig('23_ks_statistics_without_states.png', dpi=300, bbox_inches='tight')
 
 # 1b Extending code to calculate system states
 a_train_df = train_df.copy()
 a_test_df = test_df.copy()
 
-a_train_df = quantize_valves(a_train_df, actuators, ignore=['P1_PP01BR','P1_PP02R'], step=5) # mutating df
+a_train_df = quantize_valves(a_train_df, actuators, ignore=[], step=5) # mutating df
 print(a_train_df[actuators])
-a_test_df = quantize_valves(a_test_df, actuators, ignore=['P1_PP01BR','P1_PP02R'], step=5) # mutating df
+a_test_df = quantize_valves(a_test_df, actuators, ignore=[], step=5) # mutating df
 
 train_s, test_s, common_states = compute_common_states(a_train_df, a_test_df, actuators)
 
@@ -148,18 +138,17 @@ print(f"Test shape: {test_sensor_data_df.shape}")
 
 
 # Compute K–S statistics on combined sensor data for common states
-ks_statistics_with_states = compare_datasets(train_sensor_data_df[sensor_cols], test_sensor_data_df[sensor_cols])
+ks_statistic_with_states = compare_datasets(train_sensor_data_df[sensor_cols], test_sensor_data_df[sensor_cols])
 
 
-plt.bar(range(len(ks_statistics_with_states)), list(ks_statistics_with_states.values()))
-plt.xticks(range(len(ks_statistics_with_states)), list(ks_statistics_with_states.keys()), rotation=90)
-plt.ylabel("K–S statistic score")
-plt.title("(21.03_train vs 21.03_test) with states")
+plt.bar(range(len(ks_statistic_with_states)), list(ks_statistic_with_states.values()))
+plt.xticks(range(len(ks_statistic_with_states)), list(ks_statistic_with_states.keys()), rotation=90)
+plt.ylabel("K–S statistic (end23_train vs end23_test)")
 plt.tight_layout()
-plt.savefig('21_ks_statistics_with_states.png', dpi=300, bbox_inches='tight')
+plt.savefig('ks_statistics_with_states.png', dpi=300, bbox_inches='tight')
 
 #1d Plot CCDFs of K–S statistics
-x1, y1 = compute_ccdf(list(ks_statistics_with_states.values()))
+x1, y1 = compute_ccdf(list(ks_statistic_with_states.values()))
 x2, y2 = compute_ccdf(list(ks_statistics_without_states.values()))
 
 plt.figure(figsize=(7,5))
@@ -167,7 +156,7 @@ plt.plot(x1, y1, label='With system states', color='red')
 plt.plot(x2, y2, label='Without system states', color='blue')
 plt.xlabel('K–S statistic')
 plt.ylabel('P(KS ≥ x)')
-plt.title('CCDFs of K–S statistics (hai-21.03 Train vs Test)')
+plt.title('CCDFs of K–S statistics (end23 Train vs Test)')
 plt.legend()
 plt.grid(True)
-plt.savefig('ccdf-21.png', dpi=300, bbox_inches='tight')
+plt.savefig('ccdf-end23.png', dpi=300, bbox_inches='tight')
