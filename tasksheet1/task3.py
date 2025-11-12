@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 from glob import glob
 import matplotlib.pyplot as plt
@@ -225,39 +226,81 @@ def detect_anomalies(
     print(f"Anomaly rate: {anomaly_rate:.4f} ({sum(labels)}/{len(labels)})")
     return scores, labels, anomaly_rate
 
+def optimal_params(n, p_fp): # number of elements, desired false positive rate
+    m = -n * math.log(p_fp) / (math.log(2)**2) # the minimum number of bits needed to achieve your target false positive rate
+    k = int(round((m/n) * math.log(2))) #the optimal number of hash functions that minimizes false positives for that filter size.
+    return int(m), k
+
 # Main execution
 if __name__ == "__main__":
     print("=== HAI 21.03 N-gram Anomaly Detection ===")
-    n = 3  # n-gram order
-    k = 3
-    M = 100_000
     Q = 20
-    # Step 1: Load and clean data
+    #  Load and clean data
     train_df, test_df = load_and_clean_data(hai_21_train_files, hai_21_test_files)
-    
-    # Step 2: Normalize and quantize
+    ngram_size = 2
+    n = len(train_df) # number of training samples
+    M, k = optimal_params(n, p_fp=0.01)
+    print(f"Optimal Bloom filter size: {M} bits, Hash functions: {k}")
+    # Normalize and quantize
     train_quantized, test_quantized = normalize_and_quantize(train_df, test_df, Q=Q)
-    
-    print(train_quantized.head())
-    # Step 3: Build state strings
+
+
+    # # Build state strings
     train_states = build_state_strings(train_quantized.values) 
     test_states = build_state_strings(test_quantized.values)
     
-    # Step 4: Generate n-grams
+    # # Generate n-grams
+
+    train_ngrams = generate_ngrams(train_states, ngram_size)
+    test_ngrams = generate_ngrams(test_states, ngram_size)
     
-    train_ngrams = generate_ngrams(train_states, n)
-    test_ngrams = generate_ngrams(test_states, n)
+    m_values = [1_000_000, 5_000_000, 10_000_000]
+    k_values = [2,3,4,5,7]
+    q_values = [5,10,20]
+    n_values = [2,3]
+
+    results = []
+    for M in m_values:
+        for k in k_values:
+            for Q in q_values:
+                for ngram_size in n_values:
+                    train_quant, test_quant = normalize_and_quantize(train_df, test_df, Q=Q)
+                    train_states = build_state_strings(train_quant.values)
+                    test_states  = build_state_strings(test_quant.values)
+                    train_ngrams = generate_ngrams(train_states, ngram_size)
+                    test_ngrams  = generate_ngrams(test_states, ngram_size)
+                    bloom = BloomFilter(size=M, k=k)
+                    for ng in train_ngrams: bloom.add(ng)
+                    util = bloom.bloom.mean()
+                    unseen = sum(not bloom.check(ng) for ng in test_ngrams)
+                    anomaly_rate = unseen / len(test_ngrams)
+                    results.append((M, k, Q, ngram_size, util, anomaly_rate))
+                    print(f"M={M/1e6:.1f}M k={k} Q={Q} n={ngram_size} util={util:.3f} anomaly={anomaly_rate:.3f}")
+    print(results)
+    df_results = pd.DataFrame(results,
+    columns=["M","k","Q","n","utilization","anomaly"])
+    df_results.sort_values(by="anomaly").head(10)
     
-    # Step 5: Train bloom filter
+        # Filter for utilization between 0.45 and 0.56
+    util_range_df = df_results[(df_results['utilization'] >= 0.45) & (df_results['utilization'] <= 0.56)]
+
+    # Find the row with the minimum anomaly in this range
+    best_idx = util_range_df['anomaly'].idxmin()
+    best_M, best_k, best_Q, best_n = util_range_df.loc[best_idx, ['M','k','Q','n']]
+    print(f"Best config in util range → M={best_M}, k={best_k}, Q={best_Q}, n={best_n}")
+
+    # # Train bloom filter
     bloom_filter = train_bloom_filter(train_ngrams, M=M, k=k)
+
+    print(bloom_filter.bloom.mean())
     
-    # Detect anomalies
-    test_scores, anomalies, anomaly_rate = detect_anomalies(test_ngrams, bloom_filter, n=n)
+    # # Detect anomalies
+    test_scores, anomalies, anomaly_rate = detect_anomalies(test_ngrams, bloom_filter, n=ngram_size)
     
     print(f"\n=== Summary ===")
     print(f"Training samples: {len(train_df)}")
     print(f"Test samples: {len(test_df)}")
-    print(f"N-gram order: {n}")
+    print(f"N-gram order: {ngram_size}")
     print(f"Quantization levels:",Q)
     print(f"Bloom filter size: {M} bits")
     print(f"Hash functions:",k)
@@ -267,7 +310,5 @@ if __name__ == "__main__":
     results_df = pd.DataFrame({
         'anomaly_score': anomalies[:len(test_df)-n+1]  # Adjust length for n-grams
     })
-    results_df.to_csv('task3_anomaly_results.csv', index=False)
-    print("Results saved to 'task3_anomaly_results.csv'")
 
 
