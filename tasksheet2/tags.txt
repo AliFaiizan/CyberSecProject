@@ -1,0 +1,76 @@
+🔹 Boiler Process (P1)
+
+Sensors (PVs):
+
+Tag	Unit	Description
+DM-FT01	mmH₂O	Measured flowrate of the return water tank
+DM-FT01Z	l/h	Water inflow rate converted from P1_FT01
+DM-FT02	mmH₂O	Measured flowrate of the heating water tank
+DM-FT02Z	l/h	Water outflow rate conversion from P1_FT02
+DM-FT03	mmH₂O	Measured flowrate of the return water tank
+DM-FT03Z	l/h	Water outflow rate converted from P1_FT03
+DM-LIT01	mm	Water level of the return water tank
+DM-PIT01	bar	Heat-exchanger outlet pressure
+DM-PIT02	bar	Water supply pressure of the heating water pump
+DM-TIT01	℃	Heat-exchanger outlet temperature
+DM-TIT02	℃	Temperature of the heating water tank
+DM-TWIT-03	℃	Temperature of the main water tank
+DM-TWIT-04	℃	Temperature of the return water tank
+DM-TWIT-05	℃	Temperature of the buffer water tank
+DM-PWIT-03	bar	Pressure of the heating water tank
+
+Actuators / Control Outputs:
+
+Tag	Unit	Description
+DM-FCV01-D / DM-FCV01-Z	%	Flow control valve 1 (command / feedback)
+DM-FCV02-D / DM-FCV02-Z	%	Flow control valve 2 (command / feedback)
+DM-FCV03-D / DM-FCV03-Z	%	Flow control valve 3 (command / feedback)
+DM-LCV01-D / DM-LCV01-Z	%	Level control valve (command / feedback)
+DM-PCV01-D / DM-PCV01-Z	%	Pressure control valve 1 (command / feedback)
+DM-PCV02-D / DM-PCV02-Z	%	Pressure control valve 2 (command / feedback)
+DM-PP01A-D / DM-PP01A-R	Boolean	Main water pump A command / running
+DM-PP01B-D / DM-PP01B-R	Boolean	Main water pump B command / running
+DM-PP02-D / DM-PP02-R	Boolean	Heating water pump command / running
+DM-PP04-AO / DM-PP04-D	% or Boolean	Cooling water pump speed / command
+DM-SOL01-D, DM-SOL03-D	Boolean	Tank supply / drain valve open commands
+DM-HT01-D	Boolean	Heater start command
+🔹 Turbine Process (P2)
+Tag	Unit	Description
+P2_SIT01	RPM	Current turbine rotational speed
+P2_VIBTR01–04	µm	Shaft vibration measurements (X/Y, both mass wheels)
+P2_VTR01–04	µm	Preset vibration limits
+P2_RTR	RPM	RPM trip rate (limit)
+P2_SCO	–	Speed controller output
+P2_SCST	RPM	Speed change proportional to frequency deviation
+P2_VT01	rad/s	Phase lag signal of key phasor probe
+🔹 Water Treatment Process (P3)
+Tag	Unit	Description
+P3_LIT01	%	Water level of the upper tank
+P3_PIT01	–	Pressure of water inflow
+P3_FIT01	–	Flow rate into the upper tank
+P3_LH01, P3_LL01	%	High/Low water level thresholds
+P3_LCP01D	–	Pump speed command
+P3_LCV01D	–	Valve position command
+🔹 HIL Simulation / Power Generation (P4)
+Tag	Unit	Description
+P4_HT_FD	mHz	Frequency deviation of hydro turbine model
+P4_HT_LD	MW	Electrical load demand (hydro)
+P4_HT_PO	MW	Output power (hydro)
+P4_HT_PS	MW	Scheduled power demand (hydro)
+P4_ST_FD	Hz	Frequency deviation (steam turbine)
+P4_ST_GOV	–	Gate opening rate of steam turbine
+P4_ST_LD	MW	Electrical load demand (steam)
+P4_ST_PO	MW	Output power (steam)
+P4_ST_PS	MW	Scheduled power demand (steam)
+P4_ST_PT01	–	Digital steam pressure (input to turbine)
+P4_ST_TT01	–	Digital steam temperature (input to turbine)
+⚙️ Optional Setpoints (SPs)
+
+These are not strictly “physical” but describe target states:
+
+Tag	Description
+P1_B2016	Boiler pressure setpoint
+P1_B3004	Water level setpoint
+P1_B3005	Flowrate setpoint
+P1_B4002	Temperature setpoint
+P4_ST_PS, P4_HT_PS	Scheduled power demand (already in P4 section)

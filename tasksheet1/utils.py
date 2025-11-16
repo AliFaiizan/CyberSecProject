@@ -4,12 +4,12 @@ from typing import List, Tuple
 
 def load_and_clean_data(train_files: List[str], test_files: List[str], attack_cols: List[str]=None, label_files: List[str]=None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Step 1: Load & Clean Data
+    Load & Clean Data
     - Read all train CSVs for HAI 21.03
     - Drop timestamp and attack labels
     - Remove rows where Attack == 1 (use only normal data for training)
     """
-    print("\n=== Step 1: Loading & Cleaning Data ===")
+    print("\n=== Loading & Cleaning Data ===")
     
     # Load training data
     train_dfs = []
