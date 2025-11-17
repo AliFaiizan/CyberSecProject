@@ -49,8 +49,10 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
 
     # Combine all data
     train_df = pd.concat(train_dfs, ignore_index=True)
+    train_df['label'] = 0  # Assign label 0 to all training data (normal)   
     test_df = pd.concat(test_dfs, ignore_index=True)
-    
+    # train_df = train_df.sample(n=50000, random_state=42)
+    # test_df = test_df.sample(n=50000, random_state=42)
     # Load and merge labels with test data BEFORE dropping timestamp
     if label_files is not None:
         label_dfs = []
@@ -66,6 +68,7 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
         if 'Timestamp' in test_df.columns:
             test_df = test_df.rename(columns={'Timestamp': 'timestamp'})
         test_df = pd.merge(test_df, labels, on='timestamp', how='left')
+        test_df['label'] = test_df['label'].fillna(0).astype(int)  # Fill missing labels with 0 (normal)
         print(f"  Labels merged. Test shape: {test_df.shape}")
         
                 # Count attack rows in labels
@@ -77,7 +80,7 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
         #     test_df = test_df[test_df['label'] == 0]
         #     print(f"  After removing attack rows: {test_df.shape}")
     # Drop timestamp and attack columns
-    cols_to_drop = ['Timestamp', 'timestamp'] # normal df has Timestamp , attack has timestamp
+    cols_to_drop = ['timestamp','Timestamp'] # normal df has Timestamp , attack has timestamp
 
     # if attack_cols:
     #     # Only add attack columns that exist in the DataFrame
@@ -93,8 +96,6 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
     # train_df = train_df.fillna(method='ffill').fillna(0)
     # test_df = test_df.fillna(method='ffill').fillna(0)
     merged_dataset = pd.concat([train_df, test_df], ignore_index=True)
-    
-    merged_dataset['label'] = merged_dataset['label'].fillna(0) # Fill missing labels with 0 (normal)
     attack_count = (merged_dataset['label'] == 1).sum()
     print(f"Total attack rows in merged dataset: {attack_count}")
     return merged_dataset
