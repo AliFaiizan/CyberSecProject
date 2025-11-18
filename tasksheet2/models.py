@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.svm import OneClassSVM
 from sklearn.covariance import EllipticEnvelope
+from sklearn.neighbors import LocalOutlierFactor
 
 def run_OneClassSVM(X, y, scenario_fn):
 
@@ -9,7 +10,7 @@ def run_OneClassSVM(X, y, scenario_fn):
     for fold_idx, train_idx, test_idx in scenario_fn(X, y):
 
         X_train , X_test = X.iloc[train_idx] , X.iloc[test_idx]    #      # normal fold + all attacks
-        y_test  = y.iloc[test_idx]
+        y_test  = y.iloc[test_idx] # test set for current fold
 
         ocsvm = OneClassSVM(kernel='rbf', nu=0.01, gamma='scale')
         ocsvm.fit(X_train)
@@ -56,9 +57,6 @@ def run_EllipticEnvelope(X, y, scenario_fn, contamination=0.01):
         all_fold_predictions.append((fold_idx, test_idx, y_pred, y_test.values))
 
     return all_fold_predictions
-
-from sklearn.neighbors import LocalOutlierFactor
-import numpy as np
 
 def run_LOF(X, y, scenario_fn, n_neighbors=20):
     
