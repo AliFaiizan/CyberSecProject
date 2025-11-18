@@ -93,3 +93,13 @@ def manual_param_search(X, y, scenario_fn, model_builder, param_grid):
 #     build_elliptic,
 #     param_grid_ee
 # )
+
+
+
+#Binary 
+# def build_binary_svm(C=1.0, gamma='scale', kernel='rbf'):
+#     return SVC(C=C, gamma=gamma, kernel=kernel)
+# param_grid_binary_svm = {
+#     'C': [0.1, 1, 10],
+#     'gamma': ['scale', 0.01, 0.001]
+# }
