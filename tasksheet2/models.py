@@ -5,7 +5,7 @@ from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
-from optimization import optimal_param_search
+from utils import optimal_param_search
 
 def run_OneClassSVM(X, y, scenario_fn):
 
@@ -16,9 +16,9 @@ def run_OneClassSVM(X, y, scenario_fn):
 
     def build_ocsvm(params):
         return OneClassSVM(kernel='rbf', **params)
-
+    print("searching optimal parameters for One-Class SVM...")
     best_params_ocsvm, results_ocsvm = optimal_param_search(X, y, scenario_fn, build_ocsvm, param_grid_ocsvm) 
-
+    print("Best parameters found for One-Class SVM:", best_params_ocsvm)
     all_fold_predictions = []   # store for later if needed
 
     for fold_idx, train_idx, test_idx in scenario_fn(X, y):
