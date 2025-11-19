@@ -157,7 +157,7 @@ def scenario_3_split(X, y, attack_type, attack_intervals, k=5, seed=42):
 
             yield fold_idx, selected_type, train_idx, test_idx
 
-from .models import run_OneClassSVM
+from models import run_OneClassSVM
 results = run_OneClassSVM(X, y, scenario_1_split)
 # Access example
 for fold_idx, test_idx, y_pred, y_test in results:
@@ -167,8 +167,8 @@ for idx, pred in zip(test_idx, y_pred):
     print(f"Row {idx}: {'ATTACK' if pred==1 else 'NORMAL'}")
 
 
-from .models import run_EllipticEnvelope
+from models import run_EllipticEnvelope
 results_ee = run_EllipticEnvelope(X, y, scenario_1_split)
 
-from .models import run_LOF
+from models import run_LOF
 results_lof = run_LOF(X, y, scenario_1_split)

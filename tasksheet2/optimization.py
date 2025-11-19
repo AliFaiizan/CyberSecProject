@@ -1,5 +1,6 @@
 import numpy as np
-def manual_param_search(X, y, scenario_fn, model_builder, param_grid):
+
+def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
     """
     model_builder(params) → returns a model instance
     param_grid = dict of lists
@@ -48,58 +49,5 @@ def manual_param_search(X, y, scenario_fn, model_builder, param_grid):
     print("\nBEST PARAMS:", best_params, "Score:", best_score)
     return best_params, results
 
-# param_grid_ocsvm = {
-#     'nu': [0.001, 0.01, 0.05],
-#     'gamma': ['scale', 0.1, 0.01, 0.001]
-# }
-
-# def build_ocsvm(params):
-#     return OneClassSVM(kernel='rbf', **params)
-
-# best_params_ocsvm, results_ocsvm = manual_param_search(
-#     X, y,
-#     scenario_1_split,
-#     build_ocsvm,
-#     param_grid_ocsvm
-# )
 
 
-# param_grid_lof = {
-#     'n_neighbors': [10, 20, 30, 50],
-#     'metric': ['euclidean', 'manhattan']
-# }
-
-# def build_lof(params):
-#     return LocalOutlierFactor(
-#         novelty=True,
-#         **params
-#     )
-
-
-# param_grid_ee = {
-#     'contamination': [0.001, 0.01, 0.05],
-#     'support_fraction': [None, 0.7, 0.9]
-# }
-
-# def build_elliptic(params):
-#     return EllipticEnvelope(**params, random_state=42)
-# Run:
-
-# python
-# Copy code
-# best_params_ee, results_ee = manual_param_search(
-#     X, y,
-#     scenario_1_split,
-#     build_elliptic,
-#     param_grid_ee
-# )
-
-
-
-#Binary 
-# def build_binary_svm(C=1.0, gamma='scale', kernel='rbf'):
-#     return SVC(C=C, gamma=gamma, kernel=kernel)
-# param_grid_binary_svm = {
-#     'C': [0.1, 1, 10],
-#     'gamma': ['scale', 0.01, 0.001]
-# }
