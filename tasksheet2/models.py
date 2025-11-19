@@ -9,27 +9,28 @@ from utils import optimal_param_search
 
 def run_OneClassSVM(X, y, scenario_fn):
 
-    param_grid_ocsvm = {
-    'nu': [0.001, 0.01, 0.05],
-    'gamma': ['scale', 0.1, 0.01, 0.001]
-    }
+    # param_grid_ocsvm = {
+    # 'nu': [0.001, 0.01, 0.05],
+    # 'gamma': ['scale', 0.1, 0.01, 0.001]
+    # }
 
-    def build_ocsvm(params):
-        return OneClassSVM(kernel='rbf', **params)
-    print("searching optimal parameters for One-Class SVM...")
-    best_params_ocsvm, results_ocsvm = optimal_param_search(X, y, scenario_fn, build_ocsvm, param_grid_ocsvm) 
-    print("Best parameters found for One-Class SVM:", best_params_ocsvm)
+    # def build_ocsvm(params):
+    #     return OneClassSVM(kernel='rbf', **params)
+    # print("searching optimal parameters for One-Class SVM...")
+    # best_params_ocsvm, results_ocsvm = optimal_param_search(X, y, scenario_fn, build_ocsvm, param_grid_ocsvm) 
+    # print("Best parameters found for One-Class SVM:", best_params_ocsvm)
+
     all_fold_predictions = []   # store for later if needed
-
+    # nu: 0.001, gamma: scale
     for fold_idx, train_idx, test_idx in scenario_fn(X, y):
 
         #xtest is feature data used to testing
         X_train , X_test = X.iloc[train_idx] , X.iloc[test_idx]    # labeled      # normal fold + all attacks
         y_test  = y.iloc[test_idx] # test set for current fold # binary label of testing attack or no 
-
-        ocsvm = OneClassSVM(kernel='rbf', **best_params_ocsvm)
+        print(f"Training One-Class SVM with params: nu=0.001, gamma='scale' on fold {fold_idx+1}...")
+        ocsvm = OneClassSVM(kernel='rbf', nu=0.001, gamma='scale')  # best_params_ocsvm
         ocsvm.fit(X_train)
-
+        print(f"Predicting on test set for fold {fold_idx+1}...")
         # OC-SVM outputs: +1 normal, -1 anomaly
         y_pred_raw = ocsvm.predict(X_test)
 
