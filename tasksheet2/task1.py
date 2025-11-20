@@ -156,25 +156,25 @@ def main():
     # Load data as before...
 
     # Choose scenario function
-    if args.scenario == '1':
+    if args.sc == '1':
         scenario_fn = scenario_1_split
-    elif args.scenario == '2':
+    elif args.sc == '2':
         scenario_fn = scenario_2_split
-    elif args.scenario == '3':
+    elif args.sc == '3':
         scenario_fn = scenario_3_split
 
     # Run selected model
-    if args.model == 'ocsvm':
+    if args.md == 'ocsvm':
         results = run_OneClassSVM(X, y, scenario_fn)
-        out_dir = f"exports/Scenario{args.scenario}/OCSVM"
-    elif args.model == 'lof':
+        out_dir = f"exports/Scenario{args.sc}/OCSVM"
+    elif args.md == 'lof':
         results = run_LOF(X, y, scenario_fn)
-        out_dir = f"exports/Scenario{args.scenario}/LOF"
-    elif args.model == 'ee':
+        out_dir = f"exports/Scenario{args.sc}/LOF"
+    elif args.md == 'ee':
         results = run_EllipticEnvelope(X, y, scenario_fn)
-        out_dir = f"exports/Scenario{args.scenario}/EllipticEnvelope"
+        out_dir = f"exports/Scenario{args.sc}/EllipticEnvelope"
 
-    print(f"Running {args.model.upper()} on Scenario {args.scenario} ...")
+    print(f"Running {args.md.upper()} on Scenario {args.sc} ...")
     for fold_idx, test_idx, y_pred, y_test in results:
         out_file = f"{out_dir}/Predictions_Fold{fold_idx+1}.csv"
         export_model_output(haiEnd_df, test_idx, y_pred, out_file)
