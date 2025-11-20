@@ -3,10 +3,9 @@ from glob import glob
 import numpy as np
 import pandas as pd
 
-
-train_files = sorted(glob("../haiend-23.05/end-train1.csv"))
-test_files = sorted(glob("../haiend-23.05/end-test1.csv"))
-label_files = sorted(glob("../haiend-23.05/label-test1.csv"))
+train_files = sorted(glob("../datasets/haiend-23.05/end-train1.csv"))
+test_files = sorted(glob("../datasets/haiend-23.05/end-test1.csv"))
+label_files = sorted(glob("../datasets/haiend-23.05/label-test1.csv"))
 
 haiEnd_df = load_and_clean_data(train_files, test_files, attack_cols=None, label_files=label_files) # merge train and test data
 
@@ -165,10 +164,3 @@ for fold_idx, test_idx, y_pred, y_test in results:
 
 for idx, pred in zip(test_idx, y_pred):
     print(f"Row {idx}: {'ATTACK' if pred==1 else 'NORMAL'}")
-
-
-# from models import run_EllipticEnvelope
-# results_ee = run_EllipticEnvelope(X, y, scenario_1_split)
-
-# from models import run_LOF
-# results_lof = run_LOF(X, y, scenario_1_split)

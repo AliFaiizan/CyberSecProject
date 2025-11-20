@@ -9,16 +9,17 @@ from utils import optimal_param_search
 
 def run_OneClassSVM(X, y, scenario_fn):
 
-    # param_grid_ocsvm = {
-    # 'nu': [0.001, 0.01, 0.05],
-    # 'gamma': ['scale', 0.1, 0.01, 0.001]
-    # }
+    param_grid_ocsvm = {
+    'nu': [0.01, 0.001, 0.05],
+    'gamma': ['scale'] # 0.1 0.01,, 0.001 is too large
+    }
 
-    # def build_ocsvm(params):
-    #     return OneClassSVM(kernel='rbf', **params)
-    # print("searching optimal parameters for One-Class SVM...")
-    # best_params_ocsvm, results_ocsvm = optimal_param_search(X, y, scenario_fn, build_ocsvm, param_grid_ocsvm) 
-    # print("Best parameters found for One-Class SVM:", best_params_ocsvm)
+    def build_ocsvm(params):
+        return OneClassSVM(kernel='rbf', **params)
+    print("searching optimal parameters for One-Class SVM...")
+    best_params_ocsvm, results_ocsvm = optimal_param_search(X, y, scenario_fn, build_ocsvm, param_grid_ocsvm) 
+    print("Best parameters found for One-Class SVM:", best_params_ocsvm)
+    return
 
     all_fold_predictions = []   # store for later if needed
     # nu: 0.001, gamma: scale

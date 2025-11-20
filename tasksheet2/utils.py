@@ -118,8 +118,10 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
     import itertools
     keys = list(param_grid.keys())
     values = list(param_grid.values())
+    print(keys,values)
 
     for combo in itertools.product(*values):
+        print("key,combo",keys,combo)
         params = dict(zip(keys, combo))
 
         fold_scores = []
@@ -132,7 +134,7 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
             # Create model with current param combo
             model = model_builder(params)
             model.fit(X_train)
-
+            print(f"Fitting model with params: {params}")
             # One-class models output +1 (normal) / -1 (attack)
             raw_pred = model.predict(X_test)
             y_pred = (raw_pred == -1).astype(int)  # attack=1, normal=0
