@@ -3,10 +3,11 @@ from exports import export_model_output
 from glob import glob
 import numpy as np
 import pandas as pd
+import argparse
 
-train_files = sorted(glob("../datasets/haiend-23.05/end-train*.csv"))
-test_files = sorted(glob("../datasets/haiend-23.05/end-test*.csv"))
-label_files = sorted(glob("../datasets/haiend-23.05/label-test*.csv"))
+train_files = sorted(glob("../datasets/haiend-23.05/end-train1.csv"))
+test_files = sorted(glob("../datasets/haiend-23.05/end-test1.csv"))
+label_files = sorted(glob("../datasets/haiend-23.05/label-test1.csv"))
 
 haiEnd_df = load_and_clean_data(train_files, test_files, attack_cols=None, label_files=label_files) # merge train and test data
 
@@ -145,12 +146,41 @@ def scenario_3_split(X, y, k=5, seed=42):
 
         yield fold_idx, selected_type, train_idx, test_idx
 
-from models import run_OneClassSVM
-print("Running One-Class SVM on Scenario 1...")
-results = run_OneClassSVM(X, y, scenario_1_split)
-for fold_idx, test_idx, y_pred, y_test in results:
-    out_file = f"exports/Scenario1/OCSVM/Predictions_Fold{fold_idx+1}.csv"
-    export_model_output(haiEnd_df, test_idx, y_pred, out_file)
+from models import run_OneClassSVM, run_LOF, run_EllipticEnvelope
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--md', choices=['ocsvm', 'lof', 'ee'], required=True, help='Which model to run')
+    parser.add_argument('--sc', choices=['1', '2', '3'], required=True, help='Which scenario to run')
+    args = parser.parse_args()
+
+    # Load data as before...
+
+    # Choose scenario function
+    if args.scenario == '1':
+        scenario_fn = scenario_1_split
+    elif args.scenario == '2':
+        scenario_fn = scenario_2_split
+    elif args.scenario == '3':
+        scenario_fn = scenario_3_split
+
+    # Run selected model
+    if args.model == 'ocsvm':
+        results = run_OneClassSVM(X, y, scenario_fn)
+        out_dir = f"exports/Scenario{args.scenario}/OCSVM"
+    elif args.model == 'lof':
+        results = run_LOF(X, y, scenario_fn)
+        out_dir = f"exports/Scenario{args.scenario}/LOF"
+    elif args.model == 'ee':
+        results = run_EllipticEnvelope(X, y, scenario_fn)
+        out_dir = f"exports/Scenario{args.scenario}/EllipticEnvelope"
+
+    print(f"Running {args.model.upper()} on Scenario {args.scenario} ...")
+    for fold_idx, test_idx, y_pred, y_test in results:
+        out_file = f"{out_dir}/Predictions_Fold{fold_idx+1}.csv"
+        export_model_output(haiEnd_df, test_idx, y_pred, out_file)
+
+if __name__ == "__main__":
+    main()
 
 from exports import export_scenario_1, export_scenario_2
 

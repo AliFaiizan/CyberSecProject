@@ -67,7 +67,7 @@ def run_EllipticEnvelope(X, y, scenario_fn, contamination=0.01):
 
         # Create model
         ee = EllipticEnvelope(**best_params_ee, random_state=42)
-
+        print(f"Training EllipticEnvelope with params: {best_params_ee} on fold {fold_idx+1}...")   
         # Fit ONLY normal
         ee.fit(X_train)
 
@@ -109,7 +109,7 @@ def run_LOF(X, y, scenario_fn, n_neighbors=20):
             **best_params_lof,
             novelty=True
         )
-
+        print(f"Training LOF with params: {best_params_lof} on fold {fold_idx+1}...")
         # Fit ONLY normal samples
         lof.fit(X_train)
 
