@@ -106,9 +106,17 @@ def export_scenario_3(merged_df, X, y,scenario_fn, attack_type, attack_intervals
 def export_model_output(merged_df, test_idx, y_pred, out_file):
     """
     Exports model predictions to CSV.
-    Marks each row in test_idx with predicted label.
+    Marks each row in test_idx with predicted label and attack status.
+    Also prints a summary of predictions.
     """
     output_df = merged_df.iloc[test_idx].copy()
     output_df['predicted_label'] = y_pred
+    output_df['attack_status'] = output_df['predicted_label'].apply(lambda x: 'ATTACK' if x == 1 else 'NORMAL')
     output_df.to_csv(out_file, index=False)
     print(f"Model output exported to: {out_file}")
+    
+    # Print summary statistics
+    print("\n=== Prediction Summary ===")
+    print(f"Total test samples: {len(y_pred)}")
+    print(f"Detected attacks: {(y_pred == 1).sum()}")
+    print(f"Normal samples: {(y_pred == 0).sum()}\n")

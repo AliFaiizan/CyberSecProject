@@ -5,6 +5,7 @@ from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.decomposition import PCA
 from utils import optimal_param_search
 
 def run_OneClassSVM(X, y, scenario_fn):
@@ -22,17 +23,20 @@ def run_OneClassSVM(X, y, scenario_fn):
     best_params_ocsvm = {'nu': 0.001, 'gamma': 'scale'}  # Pre-determined best params
     all_fold_predictions = []   # store for later if needed
     # nu: 0.001, gamma: scale
+    pca = PCA(n_components=0.95)
     for fold_idx, train_idx, test_idx in scenario_fn(X, y):
 
         #xtest is feature data used to testing
         X_train , X_test = X.iloc[train_idx] , X.iloc[test_idx]    # labeled      # normal fold + all attacks
         y_test  = y.iloc[test_idx] # test set for current fold # binary label of testing attack or no 
         print(f"Training One-Class SVM with params: {best_params_ocsvm} on fold {fold_idx+1}...")
+        X_train_reduced = pca.fit_transform(X_train)
+        X_test_reduced = pca.transform(X_test)
         ocsvm = OneClassSVM(kernel='rbf', **best_params_ocsvm)  # best_params_ocsvm
-        ocsvm.fit(X_train)
+        ocsvm.fit(X_train_reduced)
         print(f"Predicting on test set for fold {fold_idx+1}...")
         # OC-SVM outputs: +1 normal, -1 anomaly
-        y_pred_raw = ocsvm.predict(X_test)
+        y_pred_raw = ocsvm.predict(X_test_reduced)
 
         # Map: -1 → attack(1), 1 → normal(0)
         y_pred = np.where(y_pred_raw == -1, 1, 0)
@@ -59,20 +63,24 @@ def run_EllipticEnvelope(X, y, scenario_fn, contamination=0.01):
     best_params_ee = {'contamination': 0.001, 'support_fraction': None}  # Pre-determined best params
     all_fold_predictions = []
 
+    pca = PCA(n_components=0.95)  # Keep 95% of variance
+
     for fold_idx, train_idx, test_idx in scenario_fn(X, y):
 
         X_train = X.iloc[train_idx]        # normal only
         X_test  = X.iloc[test_idx]         # normal fold + all attacks
         y_test  = y.iloc[test_idx]
 
+        X_train_reduced = pca.fit_transform(X_train)
+        X_test_reduced = pca.transform(X_test)
         # Create model
-        ee = EllipticEnvelope(**best_params_ee, random_state=42)
+        ee = EllipticEnvelope(**best_params_ee, random_state=42) # gives warning due to high demensionality
         print(f"Training EllipticEnvelope with params: {best_params_ee} on fold {fold_idx+1}...")   
         # Fit ONLY normal
-        ee.fit(X_train)
+        ee.fit(X_train_reduced)
 
         # Predict on test
-        y_pred_raw = ee.predict(X_test)   # +1 normal, -1 outlier
+        y_pred_raw = ee.predict(X_test_reduced)   # +1 normal, -1 outlier
         y_pred = np.where(y_pred_raw == -1, 1, 0)   # convert to 0/1
 
         # Accuracy
@@ -98,6 +106,8 @@ def run_LOF(X, y, scenario_fn, n_neighbors=20):
     best_params_lof = {'n_neighbors': 20, 'metric': 'euclidean'}  # Pre-determined best params
     all_fold_predictions = []
 
+    pca = PCA(n_components=0.95)
+
     for fold_idx, train_idx, test_idx in scenario_fn(X, y):
 
         X_train = X.iloc[train_idx]      # normal only
@@ -109,12 +119,14 @@ def run_LOF(X, y, scenario_fn, n_neighbors=20):
             **best_params_lof,
             novelty=True
         )
+        X_train_reduced = pca.fit_transform(X_train)
+        X_test_reduced = pca.transform(X_test)
         print(f"Training LOF with params: {best_params_lof} on fold {fold_idx+1}...")
         # Fit ONLY normal samples
-        lof.fit(X_train)
+        lof.fit(X_train_reduced)
 
         # Predict on test
-        y_pred_raw = lof.predict(X_test)     # +1 normal, -1 outlier
+        y_pred_raw = lof.predict(X_test_reduced)     # +1 normal, -1 outlier
         y_pred = np.where(y_pred_raw == -1, 1, 0)
 
         # Accuracy
