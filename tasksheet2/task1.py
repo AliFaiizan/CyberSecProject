@@ -1,3 +1,4 @@
+import os
 from utils import load_and_clean_data
 from exports import export_model_output
 from glob import glob
@@ -167,12 +168,16 @@ def main():
     if args.md == 'ocsvm':
         results = run_OneClassSVM(X, y, scenario_fn)
         out_dir = f"exports/Scenario{args.sc}/OCSVM"
+        os.makedirs(out_dir, exist_ok=True)
+        
     elif args.md == 'lof':
         results = run_LOF(X, y, scenario_fn)
         out_dir = f"exports/Scenario{args.sc}/LOF"
+        os.makedirs(out_dir, exist_ok=True)
     elif args.md == 'ee':
         results = run_EllipticEnvelope(X, y, scenario_fn)
         out_dir = f"exports/Scenario{args.sc}/EllipticEnvelope"
+        os.makedirs(out_dir, exist_ok=True)
 
     print(f"Running {args.md.upper()} on Scenario {args.sc} ...")
     for fold_idx, test_idx, y_pred, y_test in results:
