@@ -160,7 +160,7 @@ def run_binary_svm(X, y,scenario_fn):
         X_train_reduced = pca.fit_transform(X_train)
         X_test_reduced = pca.transform(X_test)
 
-        model = SVC(**best_params_svm, kernel='rbf',class_weight='balanced')
+        model = SVC(**best_params_svm, kernel='rbf') #class_weight='balanced'
         model.fit(X_train_reduced, y_train)
 
         y_pred = model.predict(X_test_reduced)
