@@ -1,11 +1,12 @@
 from utils import load_and_clean_data
+from exports import export_model_output
 from glob import glob
 import numpy as np
 import pandas as pd
 
-train_files = sorted(glob("../datasets/haiend-23.05/end-train1.csv"))
-test_files = sorted(glob("../datasets/haiend-23.05/end-test1.csv"))
-label_files = sorted(glob("../datasets/haiend-23.05/label-test1.csv"))
+train_files = sorted(glob("../datasets/haiend-23.05/end-train*.csv"))
+test_files = sorted(glob("../datasets/haiend-23.05/end-test*.csv"))
+label_files = sorted(glob("../datasets/haiend-23.05/label-test*.csv"))
 
 haiEnd_df = load_and_clean_data(train_files, test_files, attack_cols=None, label_files=label_files) # merge train and test data
 
@@ -48,8 +49,6 @@ def extract_attack_types(y: pd.Series):
     
     return attack_type, intervals
 
-attack_type, attack_intervals = extract_attack_types(y)
-
 
 def make_kfold_indices(n_samples, k=5, seed=42): # generates indices for k-fold cross-validation.
     np.random.seed(seed) # seed for reproducibility
@@ -91,76 +90,70 @@ def scenario_1_split(X, y, k=5, seed=42, balance_attacks=False):
 
         yield fold_idx, train_idx, test_idx
 
-def scenario_2_split(X, y, attack_type, attack_intervals, k=5, seed=42):
+def scenario_2_split(X, y, k=5, seed=42):
     """
     Scenario 2:
       - Train on normal + (n−1) attack types (i.e., exclude one attack type)
       - Test on normal fold + all attack types
     """
+    
+    attack_type, attack_intervals = extract_attack_types(y)
+
     np.random.seed(seed)
 
     normal_idx = np.where(y == 0)[0]
-    attack_ids = attack_intervals["attack_id"].unique()
-
+    attack_ids = attack_intervals["attack_id"].unique() #[1,2,3,4,5]
+    held_out = np.random.choice(attack_ids) # For simplicity, hold out the first attack type
     folds = make_kfold_indices(len(normal_idx), k=k, seed=seed)
 
     for fold_idx in range(k):
-        # normal samples for this fold
         test_normal_idx = normal_idx[folds[fold_idx]]
         train_normal_idx = np.setdiff1d(normal_idx, test_normal_idx)
 
-        # loop through each attack type to hold out
-        for held_out in attack_ids:
+        train_attack_idx = np.where((attack_type != 0) & (attack_type != held_out))[0]
+        test_attack_idx = np.where(attack_type != 0)[0]
 
-            # training attack = all except the held_out type
-            train_attack_idx = np.where(
-                (attack_type != 0) & (attack_type != held_out)
-            )[0]
+        train_idx = np.concatenate([train_normal_idx, train_attack_idx])
+        test_idx = np.concatenate([test_normal_idx, test_attack_idx])
 
-            # test attack = all attack samples
-            test_attack_idx = np.where(attack_type != 0)[0]
+        yield fold_idx, held_out, train_idx, test_idx
 
-            train_idx = np.concatenate([train_normal_idx, train_attack_idx]) # train on normal + (n-1) attack types
-            test_idx = np.concatenate([test_normal_idx, test_attack_idx]) # test on normal fold + all attack types
-
-            yield fold_idx, held_out, train_idx, test_idx
-
-def scenario_3_split(X, y, attack_type, attack_intervals, k=5, seed=42):
+def scenario_3_split(X, y, k=5, seed=42):
     """
-    Scenario 3:
-      - Train on normal + exactly ONE attack type
+    Scenario 3 (simplified):
+      - Train on normal + ONE selected attack type
       - Test on normal fold + all attack types
     """
+    attack_type, attack_intervals = extract_attack_types(y)
     np.random.seed(seed)
 
     normal_idx = np.where(y == 0)[0]
     attack_ids = attack_intervals["attack_id"].unique()
-    
+    selected_type = np.random.choice(attack_ids)  # Pick one attack type
+
     folds = make_kfold_indices(len(normal_idx), k=k, seed=seed)
 
     for fold_idx in range(k):
-        # normal fold for testing
         test_normal_idx = normal_idx[folds[fold_idx]]
         train_normal_idx = np.setdiff1d(normal_idx, test_normal_idx)
 
-        for selected_type in attack_ids:
-            # training attack = exactly this one type
-            train_attack_idx = np.where(attack_type == selected_type)[0]
+        train_attack_idx = np.where(attack_type == selected_type)[0]
+        test_attack_idx = np.where(attack_type != 0)[0]
 
-            # test attack = all attack samples
-            test_attack_idx = np.where(attack_type != 0)[0]
+        train_idx = np.concatenate([train_normal_idx, train_attack_idx])
+        test_idx = np.concatenate([test_normal_idx, test_attack_idx])
 
-            train_idx = np.concatenate([train_normal_idx, train_attack_idx])
-            test_idx = np.concatenate([test_normal_idx, test_attack_idx])
-
-            yield fold_idx, selected_type, train_idx, test_idx
+        yield fold_idx, selected_type, train_idx, test_idx
 
 from models import run_OneClassSVM
 print("Running One-Class SVM on Scenario 1...")
 results = run_OneClassSVM(X, y, scenario_1_split)
-# Access example
 for fold_idx, test_idx, y_pred, y_test in results:
-    print(f"Fold {fold_idx}: detected {y_pred.sum()} attacks")
+    out_file = f"exports/Scenario1/OCSVM/Predictions_Fold{fold_idx+1}.csv"
+    export_model_output(haiEnd_df, test_idx, y_pred, out_file)
 
-for idx, pred in zip(test_idx, y_pred):
-    print(f"Row {idx}: {'ATTACK' if pred==1 else 'NORMAL'}")
+from exports import export_scenario_1, export_scenario_2
+
+#export_scenario_1(haiEnd_df, X, y, scenario_1_split, out_dir="exports/Scenario1")
+#export_scenario_2(haiEnd_df, X, y, scenario_2_split, out_dir="exports/Scenario2")
+# export_scenario_3(haiEnd_df, X, y, scenario_3_split, out_dir="exports/Scenario3")
