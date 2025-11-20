@@ -119,8 +119,8 @@ def run_LOF(X, y, scenario_fn, n_neighbors=20):
             **best_params_lof,
             novelty=True
         )
-        X_train_reduced = pca.fit_transform(X_train)
-        X_test_reduced = pca.transform(X_test)
+        X_train_reduced = pca.fit_transform(X_train) #computes the PCA parameters (mean, components, etc.) from the training data and applies the transformation.
+        X_test_reduced = pca.transform(X_test) #uses the already-computed PCA parameters from the training data to transform the test data.
         print(f"Training LOF with params: {best_params_lof} on fold {fold_idx+1}...")
         # Fit ONLY normal samples
         lof.fit(X_train_reduced)
@@ -138,7 +138,7 @@ def run_LOF(X, y, scenario_fn, n_neighbors=20):
 
     return all_fold_predictions
 
-def run_binary_svm(X, y, attack_type, attack_intervals, scenario_fn, C=1.0, gamma='scale'):
+def run_binary_svm(X, y,scenario_fn):
      
     # param_grid_binary_svm = {
     # 'C': [0.1, 1, 10],
@@ -149,18 +149,21 @@ def run_binary_svm(X, y, attack_type, attack_intervals, scenario_fn, C=1.0, gamm
     # best_params_svm, results_svm = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y,attack_type,attack_intervals), build_binary_svm, param_grid_binary_svm)
     best_params_svm = {'C': 0.1, 'gamma': 'scale'}  # Pre-determined best params
     svm_predictions = []
-
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, attack_type, attack_intervals):
+    pca = PCA(n_components=0.95)
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
 
         X_train = X.iloc[train_idx]
         X_test  = X.iloc[test_idx]
         y_train = y.iloc[train_idx]
         y_test  = y.iloc[test_idx]
 
-        model = SVC(C=C, gamma=gamma, kernel='rbf')
-        model.fit(X_train, y_train)
+        X_train_reduced = pca.fit_transform(X_train)
+        X_test_reduced = pca.transform(X_test)
 
-        y_pred = model.predict(X_test)
+        model = SVC(**best_params_svm, kernel='rbf',class_weight='balanced')
+        model.fit(X_train_reduced, y_train)
+
+        y_pred = model.predict(X_test_reduced)
         acc = (y_pred == y_test).mean()
 
         print(f"Fold {fold_idx+1}, AttackID={attack_id}: Accuracy={acc:.4f} | Train={len(train_idx)}, Test={len(test_idx)}")
@@ -169,7 +172,7 @@ def run_binary_svm(X, y, attack_type, attack_intervals, scenario_fn, C=1.0, gamm
 
     return svm_predictions
 
-def run_knn(X, y, attack_type, attack_intervals, scenario_fn, params):
+def run_knn(X, y, scenario_fn):
 
     # def build_knn(params):
     #     return KNeighborsClassifier(
@@ -187,19 +190,21 @@ def run_knn(X, y, attack_type, attack_intervals, scenario_fn, params):
 
     best_params_knn = {'n_neighbors': 3, 'weights': 'uniform', 'metric': 'euclidean'}
     all_predictions = []
-
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, attack_type, attack_intervals):
+    pca = PCA(n_components=0.95)
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
 
         X_train = X.iloc[train_idx]
         X_test  = X.iloc[test_idx]
         y_train = y.iloc[train_idx]
         y_test  = y.iloc[test_idx]
+        
+        X_train_reduced = pca.fit_transform(X_train)
+        X_test_reduced = pca.transform(X_test)
 
         model = KNeighborsClassifier(**best_params_knn)
 
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-
+        model.fit(X_train_reduced, y_train)
+        y_pred = model.predict(X_test_reduced)
         acc = (y_pred == y_test).mean()
         print(f"Fold {fold_idx+1}, AttackID={attack_id}: kNN Accuracy={acc:.4f}")
 
@@ -227,19 +232,19 @@ def run_random_forest(X, y, attack_type, attack_intervals, scenario_fn, params):
 
     best_params_rf = {'n_estimators': 50, 'max_depth': 5, 'min_samples_split': 5}
     all_predictions = []
-
+    pca = PCA(n_components=0.95)
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, attack_type, attack_intervals):
 
         X_train = X.iloc[train_idx]
         X_test  = X.iloc[test_idx]
         y_train = y.iloc[train_idx]
         y_test  = y.iloc[test_idx]
-
+        X_train_reduced = pca.fit_transform(X_train)
+        X_test_reduced = pca.transform(X_test)
         model = RandomForestClassifier(**best_params_rf, random_state=42)
 
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-
+        model.fit(X_train_reduced, y_train)
+        y_pred = model.predict(X_test_reduced)
         acc = (y_pred == y_test).mean()
         print(f"Fold {fold_idx+1}, AttackID={attack_id}: Random Forest Accuracy={acc:.4f}")
 

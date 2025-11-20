@@ -10,11 +10,6 @@ train_files = sorted(glob("../datasets/haiend-23.05/end-train1.csv"))
 test_files = sorted(glob("../datasets/haiend-23.05/end-test1.csv"))
 label_files = sorted(glob("../datasets/haiend-23.05/label-test1.csv"))
 
-haiEnd_df = load_and_clean_data(train_files, test_files, attack_cols=None, label_files=label_files) # merge train and test data
-
-X = haiEnd_df.drop(columns=['label', 'timestamp'], errors='ignore') # label here refers to attack label 0 or 1
-y = haiEnd_df['label']
-
 def extract_attack_types(y: pd.Series):
     """
     Given a binary label Series y (0=normal, 1=attack),
@@ -147,14 +142,33 @@ def scenario_3_split(X, y, k=5, seed=42):
 
         yield fold_idx, selected_type, train_idx, test_idx
 
-from models import run_OneClassSVM, run_LOF, run_EllipticEnvelope
+from models import run_OneClassSVM, run_LOF, run_EllipticEnvelope, run_knn, run_binary_svm, run_random_forest
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--md', choices=['ocsvm', 'lof', 'ee'], required=True, help='Which model to run')
-    parser.add_argument('--sc', choices=['1', '2', '3'], required=True, help='Which scenario to run')
+    parser.add_argument('--md', choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'], required=True, help='Which model to run')
+    parser.add_argument('--sc', choices=['1', '2', '3'], required=False, help='Which scenario to run (required for knn, svm, rf)')
+    parser.add_argument('--k', type=int, default=5, help='Number of folds (default: 5)')
+    parser.add_argument('--output-dir', type=str, default='exports', help='Output directory (default: exports)')
     args = parser.parse_args()
 
+    # Validate: one-class models use only scenario 1, supervised models need scenario 2 or 3
+    one_class_models = ['ocsvm', 'lof', 'ee']
+    supervised_models = ['knn', 'svm', 'rf']
+    
+    if args.md in one_class_models:
+        args.sc = '1'  # Force scenario 1 for one-class models
+    elif args.md in supervised_models:
+        if args.sc is None or args.sc == '1':
+            print("Error: Models 'knn', 'svm', 'rf' require --sc 2 or 3")
+            return
+
     # Load data as before...
+    
+    haiEnd_df = load_and_clean_data(train_files, test_files, attack_cols=None, label_files=label_files) # merge train and test data
+
+    X = haiEnd_df.drop(columns=['label', 'timestamp'], errors='ignore') # label here refers to attack label 0 or 1
+    y = haiEnd_df['label']
 
     # Choose scenario function
     if args.sc == '1':
@@ -168,22 +182,37 @@ def main():
     if args.md == 'ocsvm':
         results = run_OneClassSVM(X, y, scenario_fn)
         out_dir = f"exports/Scenario{args.sc}/OCSVM"
-        os.makedirs(out_dir, exist_ok=True)
-        
     elif args.md == 'lof':
         results = run_LOF(X, y, scenario_fn)
         out_dir = f"exports/Scenario{args.sc}/LOF"
-        os.makedirs(out_dir, exist_ok=True)
     elif args.md == 'ee':
         results = run_EllipticEnvelope(X, y, scenario_fn)
         out_dir = f"exports/Scenario{args.sc}/EllipticEnvelope"
-        os.makedirs(out_dir, exist_ok=True)
+    elif args.md == 'svm':
+        results = run_binary_svm(X, y, scenario_fn)
+        out_dir = f"exports/Scenario{args.sc}/SVM"
+    elif args.md == 'knn':
+        results = run_knn(X, y, scenario_fn=scenario_fn)
+        out_dir = f"exports/Scenario{args.sc}/kNN"
+    elif args.md == 'rf':
+        results = run_random_forest(X, y, scenario_fn)
+        out_dir = f"exports/Scenario{args.sc}/RandomForest"
+    else:
+        print(f"Unknown model: {args.md}")
+        return
 
-    print(f"Running {args.md.upper()} on Scenario {args.sc} ...")
-    for fold_idx, test_idx, y_pred, y_test in results:
-        out_file = f"{out_dir}/Predictions_Fold{fold_idx+1}.csv"
-        export_model_output(haiEnd_df, test_idx, y_pred, out_file)
+    os.makedirs(out_dir, exist_ok=True)
 
+    if args.sc == '2' or args.sc == '3':
+        print(f"Running {args.md.upper()} on Scenario {args.sc} ...")
+        for fold_idx, attack_id, test_idx, y_pred, y_test in results:
+            out_file = f"{out_dir}/Predictions_Fold{fold_idx+1}.csv"
+            export_model_output(haiEnd_df, test_idx, y_pred, out_file)
+    else:       
+        print(f"Running {args.md.upper()} on Scenario {args.sc} ...")
+        for fold_idx, test_idx, y_pred, y_test in results:
+            out_file = f"{out_dir}/Predictions_Fold{fold_idx+1}.csv"
+            export_model_output(haiEnd_df, test_idx, y_pred, out_file)
 if __name__ == "__main__":
     main()
 
