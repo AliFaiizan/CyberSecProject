@@ -133,8 +133,9 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
 
             # Create model with current param combo
             model = model_builder(params)
-            model.fit(X_train)
             print(f"Fitting model with params: {params}")
+            model.fit(X_train)
+            print("Model fitting complete.")
             # One-class models output +1 (normal) / -1 (attack)
             raw_pred = model.predict(X_test)
             y_pred = (raw_pred == -1).astype(int)  # attack=1, normal=0
