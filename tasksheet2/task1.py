@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import argparse
 
-train_files = sorted(glob("../datasets/hai-22.04/train*.csv"))
-test_files = sorted(glob("../datasets/hai-22.04/test*.csv"))
+train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
+test_files = sorted(glob("../datasets/hai-22.04/test1.csv"))
 # label_files = sorted(glob("../datasets/hai-22.04/label-test*.csv"))
 
 def extract_attack_types(y: pd.Series):
@@ -149,6 +149,7 @@ def main():
     parser.add_argument('--md', choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'], required=True, help='Which model to run')
     parser.add_argument('--sc', choices=['1', '2', '3'], required=False, help='Which scenario to run (required for knn, svm, rf)')
     parser.add_argument('--k', type=int, default=5, help='Number of folds (default: 5)')
+    parser.add_argument('--e', choices=['1', '2', '3'], default='1', help='Export Kfold splits scenarios:{1,2,3} (default: 1)')
     parser.add_argument('--output-dir', type=str, default='exports', help='Output directory (default: exports)')
     args = parser.parse_args()
 
@@ -178,7 +179,17 @@ def main():
     elif args.sc == '3':
         scenario_fn = scenario_3_split
 
+    from exports import export_scenario_1, export_scenario_2 , export_scenario_3
+
+    if args.e == '1':
+        export_scenario_1(haiEnd_df, X, y, scenario_1_split, out_dir="exports/Scenario1")
+    elif args.e == '2':
+        export_scenario_2(haiEnd_df, X, y, scenario_2_split, out_dir="exports/Scenario2")
+    elif args.e == '3':
+        export_scenario_3(haiEnd_df, X, y, scenario_3_split, out_dir="exports/Scenario3")
+
     # Run selected model
+    #TODO pass kfold indices to model functions
     if args.md == 'ocsvm':
         results = run_OneClassSVM(X, y, scenario_fn)
         out_dir = f"exports/Scenario{args.sc}/OCSVM"
@@ -216,8 +227,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-from exports import export_scenario_1, export_scenario_2
-
-#export_scenario_1(haiEnd_df, X, y, scenario_1_split, out_dir="exports/Scenario1")
-#export_scenario_2(haiEnd_df, X, y, scenario_2_split, out_dir="exports/Scenario2")
-# export_scenario_3(haiEnd_df, X, y, scenario_3_split, out_dir="exports/Scenario3")
