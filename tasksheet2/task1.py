@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import argparse
 
-train_files = sorted(glob("../datasets/haiend-23.05/end-train1.csv"))
-test_files = sorted(glob("../datasets/haiend-23.05/end-test1.csv"))
-label_files = sorted(glob("../datasets/haiend-23.05/label-test1.csv"))
+train_files = sorted(glob("../datasets/hai-22.04/train*.csv"))
+test_files = sorted(glob("../datasets/hai-22.04/test*.csv"))
+# label_files = sorted(glob("../datasets/hai-22.04/label-test*.csv"))
 
 def extract_attack_types(y: pd.Series):
     """
@@ -165,10 +165,10 @@ def main():
 
     # Load data as before...
     
-    haiEnd_df = load_and_clean_data(train_files, test_files, attack_cols=None, label_files=label_files) # merge train and test data
+    haiEnd_df = load_and_clean_data(train_files, test_files, attack_cols=None) # merge train and test data # merge train and test data
 
-    X = haiEnd_df.drop(columns=['label', 'timestamp'], errors='ignore') # label here refers to attack label 0 or 1
-    y = haiEnd_df['label']
+    X = haiEnd_df.drop(columns=['Attack', 'timestamp'], errors='ignore') # label here refers to attack label 0 or 1
+    y = haiEnd_df['Attack']
 
     # Choose scenario function
     if args.sc == '1':

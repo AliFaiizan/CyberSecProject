@@ -7,7 +7,7 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
 
     """
     Load & Clean Data
-    - Read all train CSVs for HAIend 23.05
+    - Read all train CSVs for HAIend 22.04
     - Drop timestamp and attack labels
     - Remove rows where Attack == 1 (use only normal data for training)
     """
@@ -20,12 +20,6 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
         df = pd.read_csv(file)
         print(f"  Original shape: {df.shape}")
         
-        # # Remove attack rows (keep only normal data for training)
-        # if attack_cols and all(col in df.columns for col in attack_cols):
-        #     normal_mask = df[attack_cols] == 0
-        #     df = df[normal_mask]
-        #     print(f"  After removing attacks from normal: {df.shape}")
-        
         train_dfs.append(df)
     
     # Load test data
@@ -35,55 +29,47 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
         df = pd.read_csv(file)
         print(f"  Original shape: {df.shape}")
         
-        # # Check if attack columns exist in dataframe
-        # if attack_cols:  # This checks if attack_cols is not None and not empty
-        #     if all(col in df.columns for col in attack_cols):
-        #         # Count rows with Attack == 1
-        #         attack_count = (df[attack_cols] == 1).any(axis=1).sum()
-        #         print(f"  Number of attack rows: {attack_count}")
-        #         # Remove attack samples (keep only rows where all attack columns are 0)
-        #         df = df[(df[attack_cols] == 0).all(axis=1)]
-        #         print(f"  After removing attacks: {df.shape}")
-        # else:
-        #     print("  No attack columns provided, skipping attack removal")
-        
         test_dfs.append(df)
     
-
     # Combine all data
-    train_df = pd.concat(train_dfs, ignore_index=True)
-    train_df['label'] = 0  # Assign label 0 to all training data (normal)   
+    train_df = pd.concat(train_dfs, ignore_index=True) 
     test_df = pd.concat(test_dfs, ignore_index=True)
-    # train_df = train_df.sample(n=50000, random_state=42)
-    # test_df = test_df.sample(n=50000, random_state=42)
-    # Load and merge labels with test data BEFORE dropping timestamp
-    if label_files is not None:
-        label_dfs = []
-        for label_file in label_files:
-            print(f"Loading labels from {label_file}...")
-            label_df = pd.read_csv(label_file)
-            label_dfs.append(label_df)
+
+    # if label_files is not None:
+    #     label_dfs = []
+    #     for label_file in label_files:
+    #         print(f"Loading labels from {label_file}...")
+    #         label_df = pd.read_csv(label_file)
+    #         ts = str(label_df['timestamp'].iloc[0])
+    #         if len(ts.split(':')) == 2:
+    #             label_df = fix_label_timestamps(label_df)
+    #         label_dfs.append(label_df)
         
-        labels = pd.concat(label_dfs, ignore_index=True)
+    #     print(label_df['timestamp'][-5:])  # Print last 5 timestamps for verification
+    #     labels = pd.concat(label_dfs, ignore_index=True)
+    #     attack_count = (labels['label'] == 1).sum()
+    #     print(f"labels acount where attack = 1: {attack_count}")
         
         
-        # Merge on 'timestamp'
-        if 'Timestamp' in test_df.columns:
-            test_df = test_df.rename(columns={'Timestamp': 'timestamp'})
-        test_df = pd.merge(test_df, labels, on='timestamp', how='left')
-        test_df['label'] = test_df['label'].fillna(0).astype(int)  # Fill missing labels with 0 (normal)
-        print(f"  Labels merged. Test shape: {test_df.shape}")
+    #     # Merge on 'timestamp'
+    #     if 'Timestamp' in test_df.columns:
+    #         test_df = test_df.rename(columns={'Timestamp': 'timestamp'})
+    #     label_timestamps = set(label_df['timestamp'])
+
+    #     test_df = pd.merge(test_df, labels, on='timestamp', how='left')
+    #     test_df['label'] = test_df['label'].fillna(0).astype(int)  # Fill missing labels with 0 (normal)
+    #     print(f"  Labels merged. Test shape: {test_df.shape}")
         
-                # Count attack rows in labels
-        if 'label' in labels.columns:
-            attack_count = (test_df['label'] == 1).sum()
-            print(f"  Attack rows in labels: {attack_count}")
+    #             # Count attack rows in labels
+    #     if 'label' in labels.columns:
+    #         attack_count = (test_df['label'] == 1).sum()
+    #         print(f"  Attack rows in labels: {attack_count}")
         # # Remove attack rows using label column
         # if 'label' in test_df.columns:
         #     test_df = test_df[test_df['label'] == 0]
         #     print(f"  After removing attack rows: {test_df.shape}")
     # Drop timestamp and attack columns
-    cols_to_drop = ['timestamp','Timestamp'] # normal df has Timestamp , attack has timestamp
+    cols_to_drop = ['timestamp'] 
 
     # if attack_cols:
     #     # Only add attack columns that exist in the DataFrame
@@ -99,7 +85,7 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
     # train_df = train_df.fillna(method='ffill').fillna(0)
     # test_df = test_df.fillna(method='ffill').fillna(0)
     merged_dataset = pd.concat([train_df, test_df], ignore_index=True)
-    attack_count = (merged_dataset['label'] == 1).sum()
+    attack_count = (merged_dataset['Attack'] == 1).sum()
     print(f"Total attack rows in merged dataset: {attack_count}")
     return merged_dataset
 
