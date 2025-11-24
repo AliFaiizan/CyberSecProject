@@ -144,7 +144,7 @@ def scenario_3_split(X, y, k=5, seed=42):
 
 from models import run_OneClassSVM, run_LOF, run_EllipticEnvelope, run_knn, run_binary_svm, run_random_forest
 
-def main():
+def _internal_main(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('--md', choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'], required=True, help='Which model to run')
     parser.add_argument('--sc', choices=['1', '2', '3'], required=False, help='Which scenario to run (required for knn, svm, rf)')
@@ -224,6 +224,33 @@ def main():
         for fold_idx, test_idx, y_pred, y_test in results:
             out_file = f"{out_dir}/Predictions_Fold{fold_idx+1}.csv"
             export_model_output(haiEnd_df, test_idx, y_pred, out_file)
+
+def run_from_toolbox(model, scenario, k=5, export="1"):
+    """
+    Allows toolbox.py (Task 3) to run this module.
+    """
+    class Args:
+        pass
+
+    Args.model = model
+    Args.scenario = scenario
+    Args.k = k
+    Args.e = export
+    Args.output_dir = "exports"
+
+    _internal_main(Args)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--model', choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'], required=True)
+    parser.add_argument('-sc', '--scenario', choices=['1', '2', '3'])
+    parser.add_argument('-k','--k-fold', type=int, default=5)
+    parser.add_argument('-e', choices=['1', '2', '3'], default='1')
+    args = parser.parse_args()
+
+    _internal_main(args)
+
+
 if __name__ == "__main__":
     main()
 

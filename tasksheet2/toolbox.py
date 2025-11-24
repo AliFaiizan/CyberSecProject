@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-ICS Security Toolbox – Practical Sheet 1
+Integrated ICS Security Toolbox
+Includes:
+- Practical Sheet 1 tasks
+- Practical Sheet 2 Task 1 ML models
 """
 
 import argparse
 import sys
 import os
-import re
 import glob
+import re
 
 
 DATASET_CONFIG = {
@@ -15,14 +18,14 @@ DATASET_CONFIG = {
         "folder": "../datasets/hai-21.03",
         "train_pattern": "train*.csv",
         "test_pattern": "test*.csv",
-        "script": "task1.py",
+        "script": "./statistical_analysis/task1.py",
         "has_labels": False
     },
     "hai-22.04": {
         "folder": "../datasets/hai-22.04",
         "train_pattern": "train*.csv",
         "test_pattern": "test*.csv",
-        "script": "task1-22.py",
+        "script": "./statistical_analysis/task1-22.py",
         "has_labels": False
     },
     "haiend-23.05": {
@@ -30,89 +33,115 @@ DATASET_CONFIG = {
         "train_pattern": "end-train*.csv",
         "test_pattern": "end-test*.csv",
         "label_pattern": "label-test*.csv",
-        "script": "task1-23.py",
+        "script": "./statistical_analysis/task1-23.py",
         "has_labels": True
     }
 }
 
 
-# ---------------------------------------------------------
-# MAIN FUNCTION
-# ---------------------------------------------------------
+# ==============================================================
+# MASTER TOOLBOX ENTRY POINT
+# ==============================================================
 def main():
-    parser = argparse.ArgumentParser(add_help=False)
+    # Check for help flag before parsing (to avoid requiring mode)
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print_help()
+        sys.exit(0)
+    
+    parser = argparse.ArgumentParser(
+        description="ICS Security Toolbox - Integrated Analysis and ML Detection",
+        add_help=False
+    )
+    subparsers = parser.add_subparsers(dest="mode", required=True, help="Select operation mode")
 
-    parser.add_argument(
-        "-s", "--start",
-        required=True,
-        choices=["analyze", "similarity", "ngram"],
-        help="Which task to run"
-    )
-    parser.add_argument(
+    # ===== ANALYZE SUBPARSER =====
+    analyze_parser = subparsers.add_parser("analyze", help="Run dataset analysis (Task Sheet 1)")
+    analyze_parser.add_argument(
         "--dataset",
-        required=True,
         choices=DATASET_CONFIG.keys(),
-        help="Dataset version"
+        required=True,
+        help="Dataset version to analyze"
     )
-    parser.add_argument(
+
+    # ===== SIMILARITY SUBPARSER =====
+    similarity_parser = subparsers.add_parser("similarity", help="Run similarity analysis (spearman, t-SNE, PCA)")
+    similarity_parser.add_argument(
+        "--dataset",
+        choices=DATASET_CONFIG.keys(),
+        required=True,
+        help="Dataset version for similarity analysis"
+    )
+
+    # ===== NGRAM SUBPARSER =====
+    ngram_parser = subparsers.add_parser("ngram", help="Run n-gram based detection")
+    ngram_parser.add_argument(
+        "--dataset",
+        choices=DATASET_CONFIG.keys(),
+        required=True,
+        help="Dataset version for n-gram analysis"
+    )
+    ngram_parser.add_argument(
         "--ngram-order",
         type=int,
         default=2,
-        help="N-gram order"
+        help="N-gram order (default: 2)"
     )
-    parser.add_argument("-h", "--help", action="store_true")
+
+    # ===== ML SUBPARSER =====
+    ml_parser = subparsers.add_parser("ml", help="Run machine learning detection (Task Sheet 2)")
+    ml_parser.add_argument(
+        "-m", "--model",
+        choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'],
+        required=True,
+        help="Machine learning model"
+    )
+    ml_parser.add_argument(
+        "-sc", "--scenario",
+        choices=['1', '2', '3'],
+        required=True,
+        help="Cross-validation scenario"
+    )
+    ml_parser.add_argument(
+        "-k", "--kfold",
+        type=int,
+        default=5,
+        help="Number of folds (default: 5)"
+    )
+    ml_parser.add_argument(
+        "-e", "--export",
+        choices=['1', '2', '3'],
+        default='1',
+        help="Export results (default: 1)"
+    )
 
     args = parser.parse_args()
 
-    if args.help:
-        print_help()
-        sys.exit(0)
-
-    cfg = DATASET_CONFIG[args.dataset]
-
-    # Check dataset folder exists
-    if not os.path.exists(cfg["folder"]):
-        print(f"❌ Dataset folder not found: {cfg['folder']}")
-        sys.exit(1)
-
-    # Check files exist
-    train_files = glob.glob(os.path.join(cfg["folder"], cfg["train_pattern"]))
-    test_files  = glob.glob(os.path.join(cfg["folder"], cfg["test_pattern"]))
-
-    if not train_files:
-        print("❌ No train files found.")
-        sys.exit(1)
-    if not test_files:
-        print("❌ No test files found.")
-        sys.exit(1)
-
-    print("ICS Security Toolbox")
-    print("====================")
-    print(f"Mode:    {args.start}")
-    print(f"Dataset: {args.dataset}")
-    print(f"Train files: {len(train_files)}")
-    print(f"Test files:  {len(test_files)}\n")
-
-    # Run the appropriate mode
-    if args.start == "analyze":
+    # Handle modes
+    if args.mode == "analyze":
+        cfg = DATASET_CONFIG[args.dataset]
         run_task1(cfg["script"])
-    elif args.start == "similarity":
+
+    elif args.mode == "similarity":
         run_similarity(args.dataset)
-    elif args.start == "ngram":
+
+    elif args.mode == "ngram":
         run_ngram(args.dataset, args.ngram_order)
 
+    elif args.mode == "ml":
+        run_ml(args)
 
-# ---------------------------------------------------------
-# TASK 1 – ANALYSIS
-# ---------------------------------------------------------
+    else:
+        print("Unknown mode")
+
+
+# ==============================================================
+# TASK SHEET 1 FUNCTIONS
+# ==============================================================
 def run_task1(script):
-    print(f"Running {script} ...")
+    print(f"Running dataset analysis: {script}")
     os.system(f"python {script}")
 
 
-# ---------------------------------------------------------
-# TASK 2 – SIMILARITY
-# ---------------------------------------------------------
 def run_similarity(dataset_name):
     modify_spearman(dataset_name)
     modify_tsne(dataset_name)
@@ -127,7 +156,7 @@ def run_similarity(dataset_name):
 def modify_spearman(version):
     with open("spearman_distance.py", "r") as f:
         txt = f.read()
-    txt = re.sub(r'version\s*=\s*".*"', f'version = "{version}"', txt)
+    txt = re.sub(r'version\s*=\s*".*"', f'version = \"{version}\"', txt)
     with open("spearman_distance.py", "w") as f:
         f.write(txt)
 
@@ -135,7 +164,7 @@ def modify_spearman(version):
 def modify_tsne(version):
     with open("task2c.py", "r") as f:
         txt = f.read()
-    txt = re.sub(r'versions\s*=\s*\[.*?\]', f'versions = ["{version}"]', txt)
+    txt = re.sub(r'versions\s*=\s*\[.*?\]', f'versions = [\"{version}\"]', txt)
     with open("task2c.py", "w") as f:
         f.write(txt)
 
@@ -143,21 +172,16 @@ def modify_tsne(version):
 def modify_pca(version):
     with open("task2d.py", "r") as f:
         txt = f.read()
-    txt = re.sub(r'versions\s*=\s*\[.*?\]', f'versions = ["{version}"]', txt)
+    txt = re.sub(r'versions\s*=\s*\[.*?\]', f'versions = [\"{version}\"]', txt)
     with open("task2d.py", "w") as f:
         f.write(txt)
 
 
-# ---------------------------------------------------------
-# TASK 3 – N-GRAM
-# ---------------------------------------------------------
 def run_ngram(version, n):
     with open("task3_21.03.py", "r") as f:
         txt = f.read()
 
     txt = re.sub(r"N_GRAM_ORDER\s*=\s*\d+", f"N_GRAM_ORDER = {n}", txt)
-
-    # Update dataset path
     folder = DATASET_CONFIG[version]["folder"]
     txt = re.sub(r'DATA_DIR\s*=\s*r".*"', f'DATA_DIR = r"{folder}"', txt)
 
@@ -167,20 +191,59 @@ def run_ngram(version, n):
     os.system("python task3_21.03.py")
 
 
-# ---------------------------------------------------------
+# ==============================================================
+# TASK SHEET 2 – TASK 1 (ML)
+# ==============================================================
+def run_ml(args):
+    print("\nRunning Task Sheet 2 – Machine Learning (Task 1)")
+
+    if args.model is None:
+        print("❌ Error: --model (model) required for ML mode.")
+        return
+    if args.scenario is None:
+        print("❌ Error: --scenario (scenario) required for ML mode.")
+        return
+
+    import task1
+    task1.run_from_toolbox(
+        model=args.model,
+        scenario=args.scenario,
+        k=args.k,
+        export=args.e
+    )
+
+
+# ==============================================================
 # HELP
-# ---------------------------------------------------------
+# ==============================================================
 def print_help():
     print("""
-ICS Security Toolbox – Practical Sheet 1
-========================================
+ICS Security Toolbox 
+==========================================
 
-Usage:
-    python toolbox.py -s analyze --dataset hai-21.03
-    python toolbox.py -s similarity --dataset hai-22.04
-    python toolbox.py -s ngram --dataset haiend-23.05 --ngram-order 3
-""")
+Usage: python toolbox.py <mode> [options]
 
+Available Modes:
+
+1. ANALYZE (Ks-statistic , ccdfs ):
+   python toolbox.py --mode analyze --dataset <name>
+
+2. SIMILARITY (Spearman, t-SNE, PCA):
+   python toolbox.py --mode similarity --dataset <name>
+
+3. NGRAM (N-gram Detection):
+   python toolbox.py ngram --dataset <name> --ngram-order <number>
+          
+4. ML (Traditional Machine Learning Classifiers - Task Sheet 2):
+   python toolbox.py ml -m <model> -sc <scenario> -k <kfold>
+   python toolbox.py ml -e <scenario_number> ( export scenario folds)
+
+Models: one class svm (ocsvm), Local outlier factor (lof), Elliptic Envelope (ee), k-nearest neighbors (knn), Support Vector Machine (svm), Random Forest (rf)
+Scenarios: 1 only for one class models; 2 or 3 for supervised models
+
+
+"""
+)
 
 if __name__ == "__main__":
     main()
