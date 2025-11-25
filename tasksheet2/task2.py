@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+from pyexpat import model
 import numpy as np
 import pandas as pd
 
@@ -114,37 +115,11 @@ def build_cnn(input_shape, dropout_rate=0.4, lr=1e-4):
 # --------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------
-def main():
-    parser = argparse.ArgumentParser(description="CNN Deep Learning Classifier (Task 2)")
-    parser.add_argument(
-        "-sc",
-        "--scenario",
-        required=True,
-        type=int,
-        choices=[1, 2, 3],
-        help="Scenario number 1 | 2 | 3",
-    )
-    parser.add_argument(
-        "-M",
-        required=True,
-        type=int,
-        help="Window size M (rows per CNN input)",
-    )
-    parser.add_argument(
-        "-e",
-        "--epochs",
-        default=5,
-        type=int,
-        help="Maximum training epochs",
-    )
-    parser.add_argument(
-        "--stride",
-        type=int,
-        default=10,
-        help="Stride for training windows (default=10, use 1 for max overlap)",
-    )
-    args = parser.parse_args()
-
+def _internal_main(args):
+    """
+    Internal main function that handles the CNN training logic.
+    Expects args object with: scenario, M, epochs, stride
+    """
     sc = args.scenario
     M = args.M
     epochs = args.epochs
@@ -258,6 +233,60 @@ def main():
         print(f"Normal windows: {normal_windows}")
         print(f"Window accuracy: {acc:.4f}")
 
+
+def main():
+    parser = argparse.ArgumentParser(description="CNN Deep Learning Classifier (Task 2)")
+    parser.add_argument(
+        "-sc",
+        "--scenario",
+        required=True,
+        type=int,
+        choices=[1, 2, 3],
+        help="Scenario number 1 | 2 | 3",
+    )
+    parser.add_argument(
+        "-M",
+        required=True,
+        type=int,
+        help="Window size M (rows per CNN input)",
+    )
+    parser.add_argument(
+        "-e",
+        "--epochs",
+        default=5,
+        type=int,
+        help="Maximum training epochs",
+    )
+    parser.add_argument(
+        "--stride",
+        type=int,
+        default=10,
+        help="Stride for training windows (default=10, use 1 for max overlap)",
+    )
+    args = parser.parse_args()
+
+    _internal_main(args)
+
+
+def run_from_toolbox(scenario, M, epochs=5, stride=10):
+    """
+    Allows toolbox.py (Task 3) to run this module.
+    
+    Args:
+        scenario: Scenario number (1, 2, or 3)
+        M: Window size (rows per CNN input)
+        epochs: Maximum training epochs (default: 5)
+        stride: Stride for training windows (default: 10)
+    """
+    class Args:
+        pass
+
+    Args.scenario = scenario
+    Args.M = M
+    Args.epochs = epochs
+    Args.stride = stride
+
+    _internal_main(Args)
 
 if __name__ == "__main__":
     main()

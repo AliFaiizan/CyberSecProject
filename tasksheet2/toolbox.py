@@ -114,6 +114,33 @@ def main():
         help="Export results (default: 1)"
     )
 
+    # ===== DL SUBPARSER =====
+    dl_parser = subparsers.add_parser("dl", help="Run deep learning detection (Task Sheet 2)")
+    dl_parser.add_argument(
+        "-sc",
+        "--scenario",
+        required=True,
+        choices=['1', '2', '3'],
+        help="Scenario number 1 | 2 | 3",
+    )
+    dl_parser.add_argument(
+        "-M",
+        "--window-size",
+        required=True,
+        help="Window size M (rows per CNN input)",
+    )
+    dl_parser.add_argument(
+        "-e",
+        "--epochs",
+        default=5,
+        help="Maximum training epochs",
+    )
+    dl_parser.add_argument(
+        "--stride",
+        default=10,
+        help="Stride for training windows (default=10, use 1 for max overlap)",
+    )
+
     args = parser.parse_args()
 
     # Handle modes
@@ -129,6 +156,9 @@ def main():
 
     elif args.mode == "ml":
         run_ml(args)
+    
+    elif args.mode == "dl":
+        run_dl(args)
 
     else:
         print("Unknown mode")
@@ -198,10 +228,10 @@ def run_ml(args):
     print("\nRunning Task Sheet 2 – Machine Learning (Task 1)")
 
     if args.model is None:
-        print("❌ Error: --model (model) required for ML mode.")
+        print("Error: --model (model) required for ML mode.")
         return
     if args.scenario is None:
-        print("❌ Error: --scenario (scenario) required for ML mode.")
+        print("Error: --scenario (scenario) required for ML mode.")
         return
 
     import task1
@@ -212,6 +242,20 @@ def run_ml(args):
         export=args.e
     )
 
+def run_dl(args):
+    print("\nRunning Task Sheet 2 – Deep Learning (Task 2)")
+
+    if args.scenario is None:
+        print("Error: --scenario (scenario) required for DL mode.")
+        return
+
+    import task2
+    task2.run_from_toolbox(
+        scenario=args.scenario,
+        M=args.M,
+        epochs=args.epochs,
+        stride=args.stride
+    )
 
 # ==============================================================
 # HELP
@@ -226,17 +270,20 @@ Usage: python toolbox.py <mode> [options]
 Available Modes:
 
 1. ANALYZE (Ks-statistic , ccdfs ):
-   python toolbox.py --mode analyze --dataset <name>
+   python toolbox.py analyze --dataset <name>
 
 2. SIMILARITY (Spearman, t-SNE, PCA):
-   python toolbox.py --mode similarity --dataset <name>
+   python toolbox.py similarity --dataset <name>
 
-3. NGRAM (N-gram Detection):
+3. NGRAM (N-gram anomly Detection):
    python toolbox.py ngram --dataset <name> --ngram-order <number>
           
-4. ML (Traditional Machine Learning Classifiers - Task Sheet 2):
+4. ML (Traditional Classifiers - Task Sheet 2):
    python toolbox.py ml -m <model> -sc <scenario> -k <kfold>
-   python toolbox.py ml -e <scenario_number> ( export scenario folds)
+   python toolbox.py ml -e <scenario_number> (exports scenario folds)
+
+5. DL (Deep Learning CNN - Task Sheet 2):
+    python toolbox.py dl -sc <scenario> -M <window_size> -e <epochs> --stride <stride>
 
 Models: one class svm (ocsvm), Local outlier factor (lof), Elliptic Envelope (ee), k-nearest neighbors (knn), Support Vector Machine (svm), Random Forest (rf)
 Scenarios: 1 only for one class models; 2 or 3 for supervised models

@@ -35,45 +35,9 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
     train_df = pd.concat(train_dfs, ignore_index=True) 
     test_df = pd.concat(test_dfs, ignore_index=True)
 
-    # if label_files is not None:
-    #     label_dfs = []
-    #     for label_file in label_files:
-    #         print(f"Loading labels from {label_file}...")
-    #         label_df = pd.read_csv(label_file)
-    #         ts = str(label_df['timestamp'].iloc[0])
-    #         if len(ts.split(':')) == 2:
-    #             label_df = fix_label_timestamps(label_df)
-    #         label_dfs.append(label_df)
-        
-    #     print(label_df['timestamp'][-5:])  # Print last 5 timestamps for verification
-    #     labels = pd.concat(label_dfs, ignore_index=True)
-    #     attack_count = (labels['label'] == 1).sum()
-    #     print(f"labels acount where attack = 1: {attack_count}")
-        
-        
-    #     # Merge on 'timestamp'
-    #     if 'Timestamp' in test_df.columns:
-    #         test_df = test_df.rename(columns={'Timestamp': 'timestamp'})
-    #     label_timestamps = set(label_df['timestamp'])
-
-    #     test_df = pd.merge(test_df, labels, on='timestamp', how='left')
-    #     test_df['label'] = test_df['label'].fillna(0).astype(int)  # Fill missing labels with 0 (normal)
-    #     print(f"  Labels merged. Test shape: {test_df.shape}")
-        
-    #             # Count attack rows in labels
-    #     if 'label' in labels.columns:
-    #         attack_count = (test_df['label'] == 1).sum()
-    #         print(f"  Attack rows in labels: {attack_count}")
-        # # Remove attack rows using label column
-        # if 'label' in test_df.columns:
-        #     test_df = test_df[test_df['label'] == 0]
-        #     print(f"  After removing attack rows: {test_df.shape}")
     # Drop timestamp and attack columns
     cols_to_drop = ['timestamp'] 
 
-    # if attack_cols:
-    #     # Only add attack columns that exist in the DataFrame
-    #     cols_to_drop += [col for col in attack_cols if col in train_df.columns]
         
     train_df = train_df.drop(columns=cols_to_drop, errors='ignore')
     test_df = test_df.drop(columns=cols_to_drop, errors='ignore')
@@ -81,9 +45,6 @@ def load_and_clean_data(train_files: List[str], test_files: List[str], attack_co
     print(f"Final training data shape: {train_df.shape}")
     print(f"Final test data shape: {test_df.shape}") 
     
-    # # Handle NaN values
-    # train_df = train_df.fillna(method='ffill').fillna(0)
-    # test_df = test_df.fillna(method='ffill').fillna(0)
     merged_dataset = pd.concat([train_df, test_df], ignore_index=True)
     attack_count = (merged_dataset['Attack'] == 1).sum()
     print(f"Total attack rows in merged dataset: {attack_count}")

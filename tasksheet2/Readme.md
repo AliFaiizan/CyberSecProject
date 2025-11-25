@@ -33,7 +33,7 @@ This task focuses on detecting anomalies (attacks) in the HAI-End 22.04 dataset 
    - Each output includes row indices, predicted labels, and attack/normal status.
 
 ## Usage
-install scikit library
+pip install -r requirements.txt
 
 Run the main script with desired model and scenario:
 
