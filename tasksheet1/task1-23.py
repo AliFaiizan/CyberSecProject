@@ -40,10 +40,9 @@ actuators =  [
     "DM-PP04-AO"   # cooling water pump speed (Hz)
 ]
 
-train_files = sorted(glob("../haiend-23.05/end-train*.csv"))
-test_files = sorted(glob("../haiend-23.05/end-test*.csv"))
-label_files = sorted(glob("../haiend-23.05/label-test*.csv"))
-
+train_files = sorted(glob("../datasets/haiend-23.05/end-train*.csv"))
+test_files = sorted(glob("../datasets/haiend-23.05/end-test*.csv"))
+label_files = sorted(glob("../datasets/haiend-23.05/label-test*.csv"))
 
 
 train_df, test_df = load_and_clean_data(train_files, test_files, attack_cols=None, label_files=label_files)

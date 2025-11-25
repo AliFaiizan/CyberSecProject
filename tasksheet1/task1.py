@@ -50,8 +50,8 @@ actuators =  [
     'P1_PP02R'    # Running status of heating-water pump PP02 (0/1)
 ]
 
-train_files = sorted(glob("../hai-21.03/train*.csv"))
-test_files = sorted(glob("../hai-21.03/test*.csv"))
+train_files = sorted(glob("../datasets/hai-21.03/train*.csv"))
+test_files = sorted(glob("../datasets/hai-21.03/test*.csv"))
 
 attack_cols = ['attack', 'attack_P1', 'attack_P2', 'attack_P3']
 

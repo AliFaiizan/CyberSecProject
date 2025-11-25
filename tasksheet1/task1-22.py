@@ -46,8 +46,8 @@ actuators = [
     "P1_PP02R",   # heating water pump running (0/1)
 ]
 
-train_files = sorted(glob("../hai-22.04/train*.csv"))
-test_files = sorted(glob("../hai-22.04/test*.csv"))
+train_files = sorted(glob("../datasets/hai-22.04/train*.csv"))
+test_files = sorted(glob("../datasets/hai-22.04/test*.csv"))
 attack_cols = ['Attack']
 
 train_df, test_df = load_and_clean_data(train_files, test_files, attack_cols)
