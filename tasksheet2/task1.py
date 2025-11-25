@@ -145,23 +145,16 @@ def scenario_3_split(X, y, k=5, seed=42):
 from models import run_OneClassSVM, run_LOF, run_EllipticEnvelope, run_knn, run_binary_svm, run_random_forest
 
 def _internal_main(args):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--md', choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'], required=True, help='Which model to run')
-    parser.add_argument('--sc', choices=['1', '2', '3'], required=False, help='Which scenario to run (required for knn, svm, rf)')
-    parser.add_argument('--k', type=int, default=5, help='Number of folds (default: 5)')
-    parser.add_argument('--e', choices=['1', '2', '3'], default='1', help='Export Kfold splits scenarios:{1,2,3} (default: 1)')
-    parser.add_argument('--output-dir', type=str, default='exports', help='Output directory (default: exports)')
-    args = parser.parse_args()
 
     # Validate: one-class models use only scenario 1, supervised models need scenario 2 or 3
     one_class_models = ['ocsvm', 'lof', 'ee']
     supervised_models = ['knn', 'svm', 'rf']
-    
-    if args.md in one_class_models:
-        args.sc = '1'  # Force scenario 1 for one-class models
-    elif args.md in supervised_models:
-        if args.sc is None or args.sc == '1':
-            print("Error: Models 'knn', 'svm', 'rf' require --sc 2 or 3")
+    print(args)
+    if args.model in one_class_models:
+        args.scenario = '1'  # Force scenario 1 for one-class models
+    elif args.model in supervised_models:
+        if args.scenario is None or args.scenario == '1':
+            print("Error: Models 'knn', 'svm', 'rf' require --scenario 2 or 3")
             return
 
     # Load data as before...
@@ -172,55 +165,55 @@ def _internal_main(args):
     y = haiEnd_df['Attack']
 
     # Choose scenario function
-    if args.sc == '1':
+    if args.scenario == '1':
         scenario_fn = scenario_1_split
-    elif args.sc == '2':
+    elif args.scenario == '2':
         scenario_fn = scenario_2_split
-    elif args.sc == '3':
+    elif args.scenario == '3':
         scenario_fn = scenario_3_split
 
     from exports import export_scenario_1, export_scenario_2 , export_scenario_3
 
-    if args.e == '1':
+    if args.export == '1':
         export_scenario_1(haiEnd_df, X, y, scenario_1_split, out_dir="exports/Scenario1")
-    elif args.e == '2':
+    elif args.export == '2':
         export_scenario_2(haiEnd_df, X, y, scenario_2_split, out_dir="exports/Scenario2")
-    elif args.e == '3':
+    elif args.export == '3':
         export_scenario_3(haiEnd_df, X, y, scenario_3_split, out_dir="exports/Scenario3")
 
     # Run selected model
     #TODO pass kfold indices to model functions
-    if args.md == 'ocsvm':
+    if args.model == 'ocsvm':
         results = run_OneClassSVM(X, y, scenario_fn)
-        out_dir = f"exports/Scenario{args.sc}/OCSVM"
-    elif args.md == 'lof':
+        out_dir = f"exports/Scenario{args.scenario}/OCSVM"
+    elif args.model == 'lof':
         results = run_LOF(X, y, scenario_fn)
-        out_dir = f"exports/Scenario{args.sc}/LOF"
-    elif args.md == 'ee':
+        out_dir = f"exports/Scenario{args.scenario}/LOF"
+    elif args.model == 'ee':
         results = run_EllipticEnvelope(X, y, scenario_fn)
-        out_dir = f"exports/Scenario{args.sc}/EllipticEnvelope"
-    elif args.md == 'svm':
+        out_dir = f"exports/Scenario{args.scenario}/EllipticEnvelope"
+    elif args.model == 'svm':
         results = run_binary_svm(X, y, scenario_fn)
-        out_dir = f"exports/Scenario{args.sc}/SVM"
-    elif args.md == 'knn':
+        out_dir = f"exports/Scenario{args.scenario}/SVM"
+    elif args.model == 'knn':
         results = run_knn(X, y, scenario_fn=scenario_fn)
-        out_dir = f"exports/Scenario{args.sc}/kNN"
-    elif args.md == 'rf':
+        out_dir = f"exports/Scenario{args.scenario}/kNN"
+    elif args.model == 'rf':
         results = run_random_forest(X, y, scenario_fn)
-        out_dir = f"exports/Scenario{args.sc}/RandomForest"
+        out_dir = f"exports/Scenario{args.scenario}/RandomForest"
     else:
-        print(f"Unknown model: {args.md}")
+        print(f"Unknown model: {args.model}")
         return
 
     os.makedirs(out_dir, exist_ok=True)
 
-    if args.sc == '2' or args.sc == '3':
-        print(f"Running {args.md.upper()} on Scenario {args.sc} ...")
+    if args.scenario == '2' or args.scenario == '3':
+        print(f"Running {args.model.upper()} on Scenario {args.scenario} ...")
         for fold_idx, attack_id, test_idx, y_pred, y_test in results:
             out_file = f"{out_dir}/Predictions_Fold{fold_idx+1}.csv"
             export_model_output(haiEnd_df, test_idx, y_pred, out_file)
     else:       
-        print(f"Running {args.md.upper()} on Scenario {args.sc} ...")
+        print(f"Running {args.model.upper()} on Scenario {args.scenario} ...")
         for fold_idx, test_idx, y_pred, y_test in results:
             out_file = f"{out_dir}/Predictions_Fold{fold_idx+1}.csv"
             export_model_output(haiEnd_df, test_idx, y_pred, out_file)
@@ -234,8 +227,8 @@ def run_from_toolbox(model, scenario, k=5, export="1"):
 
     Args.model = model
     Args.scenario = scenario
-    Args.k = k
-    Args.e = export
+    Args.kfold = k
+    Args.export = export
     Args.output_dir = "exports"
 
     _internal_main(Args)
@@ -244,8 +237,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model', choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'], required=True)
     parser.add_argument('-sc', '--scenario', choices=['1', '2', '3'])
-    parser.add_argument('-k','--k-fold', type=int, default=5)
-    parser.add_argument('-e', choices=['1', '2', '3'], default='1')
+    parser.add_argument('-k','--kfold', type=int, default=5)
+    parser.add_argument('-e', '--export', choices=['1', '2', '3'])
     args = parser.parse_args()
 
     _internal_main(args)

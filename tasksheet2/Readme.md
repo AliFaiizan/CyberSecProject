@@ -1,7 +1,7 @@
-# Task 1: Anomaly Detection for HAI-End 23.05 Dataset
+# Task 1: Anomaly Detection for HAI-End 22.04 Dataset
 
 ## Overview
-This task focuses on detecting anomalies (attacks) in the HAI-End 22.04 dataset using various machine learning models. The workflow includes data loading, preprocessing, scenario-based cross-validation, model training, prediction, and result export.
+This task focuses on detecting anomalies (attacks) in the HAI-End 22.04 dataset using various machine learning models. The workflow includes data loading, preprocessing, scenario-based cross-validation ,implementing classical classifiers, prediction, and result export.
 
 ## Data Structure
 - **Train files:** `../datasets/haiend-22.04/train*.csv`
@@ -58,9 +58,13 @@ python task1.py --model svm --scenario 2
 - Ensure all data files are present in the `../datasets/haiend-22.04/` directory.
 - One class models only implements scenario 1 while for binary you have to specify scenario type with --scenario command
 
+Hyperparamerter search is commented out to save execution time , and only one set of params in provided. 
+loading entire dataset which has around 1.3 million rows getting output from models can become slow even on server. 
+and extremely slow on some models like svm
+
 ## File Structure
 - `task1.py`: Main script for running experiments.
 - `models.py`: Model training and prediction functions.
 - `utils.py`: Data loading, cleaning, and utility functions.
-- `exports.py`: Functions for exporting results.
+- `exports.py`: Functions for exporting scenario folds.
 

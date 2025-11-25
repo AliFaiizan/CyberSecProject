@@ -147,7 +147,7 @@ def run_binary_svm(X, y,scenario_fn):
     # def build_binary_svm(C=1.0, gamma='scale', kernel='rbf'):
     #     return SVC(C=C, gamma=gamma, kernel=kernel)
     # best_params_svm, results_svm = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y,attack_type,attack_intervals), build_binary_svm, param_grid_binary_svm)
-    best_params_svm = {'C': 0.1, 'gamma': 'scale'}  # Pre-determined best params
+    best_params_svm = {'C': 10.0, 'gamma': 'scale', 'class_weight': 'balanced'}  # Pre-determined best params
     svm_predictions = []
     pca = PCA(n_components=0.95)
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
@@ -212,7 +212,7 @@ def run_knn(X, y, scenario_fn):
 
     return all_predictions
 
-def run_random_forest(X, y, attack_type, attack_intervals, scenario_fn, params):
+def run_random_forest(X, y, scenario_fn):
 
     # def build_rf(params):
     #     return RandomForestClassifier(
@@ -228,12 +228,12 @@ def run_random_forest(X, y, attack_type, attack_intervals, scenario_fn, params):
     # 'max_depth': [5, 10, None],
     # 'min_samples_split': [2, 5]
     # }
-    # best_params_rf, results_rf = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y,attack_type,attack_intervals), build_rf, param_grid_rf)
+    # best_params_rf, results_rf = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_rf, param_grid_rf)
 
     best_params_rf = {'n_estimators': 50, 'max_depth': 5, 'min_samples_split': 5}
     all_predictions = []
     pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, attack_type, attack_intervals):
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
 
         X_train = X.iloc[train_idx]
         X_test  = X.iloc[test_idx]
