@@ -10,8 +10,8 @@ from tensorflow.keras.layers import Flatten, Dense
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import to_categorical
 
-from utils import load_and_clean_data                          # SAME as Task 1 ✔
-from task1 import (                                            # SAME splitters ✔
+from utils import load_and_clean_data                          
+from task1 import (                                       
     scenario_1_split,
     scenario_2_split,
     scenario_3_split
@@ -81,9 +81,9 @@ def main():
     merged = load_and_clean_data(
         ["../datasets/hai-22.04/train1.csv"],
         ["../datasets/hai-22.04/test1.csv"]
-    )  # EXACTLY same as Task 1 ✔
+    )  
 
-    # Build X, y EXACTLY like Task 1
+    # Build X, y like Task 1
     X = merged.drop(columns=["timestamp", "Attack"], errors="ignore").values
     y = merged["Attack"].astype(int)
 
