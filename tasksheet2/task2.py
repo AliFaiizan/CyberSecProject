@@ -127,7 +127,7 @@ def _internal_main(args):
 
     np.random.seed(42)
 
-    print("\n=== Loading & Cleaning Data (same as Task 1) ===")
+    print("\n=== Loading & Cleaning Data ===")
     merged = load_and_clean_data(
         ["../datasets/hai-22.04/train1.csv"],
         ["../datasets/hai-22.04/test1.csv"],

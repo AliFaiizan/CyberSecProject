@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.decomposition import PCA
 from utils import optimal_param_search
 
-def run_OneClassSVM(X, y, scenario_fn):
+def run_OneClassSVM(X, y, k, scenario_fn):
 
     # param_grid_ocsvm = {
     # 'nu': [0.001], # 0.01, 0.05 
@@ -24,7 +24,7 @@ def run_OneClassSVM(X, y, scenario_fn):
     all_fold_predictions = []   # store for later if needed
     # nu: 0.001, gamma: scale
     pca = PCA(n_components=0.95)
-    for fold_idx, train_idx, test_idx in scenario_fn(X, y):
+    for fold_idx, train_idx, test_idx in scenario_fn(X, y, k):
 
         #xtest is feature data used to testing
         X_train , X_test = X.iloc[train_idx] , X.iloc[test_idx]    # labeled      # normal fold + all attacks
@@ -49,7 +49,7 @@ def run_OneClassSVM(X, y, scenario_fn):
 
     return all_fold_predictions
 
-def run_EllipticEnvelope(X, y, scenario_fn, contamination=0.01):
+def run_EllipticEnvelope(X, y, k, scenario_fn):
     # param_grid_ee = {
     # 'contamination': [0.001, 0.01, 0.05],
     # 'support_fraction': [None, 0.7, 0.9]
@@ -65,7 +65,7 @@ def run_EllipticEnvelope(X, y, scenario_fn, contamination=0.01):
 
     pca = PCA(n_components=0.95)  # Keep 95% of variance
 
-    for fold_idx, train_idx, test_idx in scenario_fn(X, y):
+    for fold_idx, train_idx, test_idx in scenario_fn(X, y ,k ):
 
         X_train = X.iloc[train_idx]        # normal only
         X_test  = X.iloc[test_idx]         # normal fold + all attacks
@@ -92,7 +92,7 @@ def run_EllipticEnvelope(X, y, scenario_fn, contamination=0.01):
 
     return all_fold_predictions
 
-def run_LOF(X, y, scenario_fn, n_neighbors=20):
+def run_LOF(X, y, k, scenario_fn):
     # param_grid_lof = {
     # 'n_neighbors': [10, 20, 30, 50],
     # 'metric': ['euclidean', 'manhattan']
@@ -108,7 +108,7 @@ def run_LOF(X, y, scenario_fn, n_neighbors=20):
 
     pca = PCA(n_components=0.95)
 
-    for fold_idx, train_idx, test_idx in scenario_fn(X, y):
+    for fold_idx, train_idx, test_idx in scenario_fn(X, y, k):
 
         X_train = X.iloc[train_idx]      # normal only
         X_test  = X.iloc[test_idx]       # normal + attack
@@ -138,7 +138,7 @@ def run_LOF(X, y, scenario_fn, n_neighbors=20):
 
     return all_fold_predictions
 
-def run_binary_svm(X, y,scenario_fn):
+def run_binary_svm(X, y, k, scenario_fn):
      
     # param_grid_binary_svm = {
     # 'C': [0.1, 1, 10],
@@ -150,7 +150,7 @@ def run_binary_svm(X, y,scenario_fn):
     best_params_svm = {'C': 10.0, 'gamma': 'scale', 'class_weight': 'balanced'}  # Pre-determined best params
     svm_predictions = []
     pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
 
         X_train = X.iloc[train_idx]
         X_test  = X.iloc[test_idx]
@@ -172,7 +172,7 @@ def run_binary_svm(X, y,scenario_fn):
 
     return svm_predictions
 
-def run_knn(X, y, scenario_fn):
+def run_knn(X, y, k,scenario_fn):
 
     # def build_knn(params):
     #     return KNeighborsClassifier(
@@ -191,7 +191,7 @@ def run_knn(X, y, scenario_fn):
     best_params_knn = {'n_neighbors': 3, 'weights': 'uniform', 'metric': 'euclidean'}
     all_predictions = []
     pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
 
         X_train = X.iloc[train_idx]
         X_test  = X.iloc[test_idx]
@@ -212,7 +212,7 @@ def run_knn(X, y, scenario_fn):
 
     return all_predictions
 
-def run_random_forest(X, y, scenario_fn):
+def run_random_forest(X, y, k, scenario_fn):
 
     # def build_rf(params):
     #     return RandomForestClassifier(
@@ -233,7 +233,7 @@ def run_random_forest(X, y, scenario_fn):
     best_params_rf = {'n_estimators': 50, 'max_depth': 5, 'min_samples_split': 5}
     all_predictions = []
     pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
 
         X_train = X.iloc[train_idx]
         X_test  = X.iloc[test_idx]

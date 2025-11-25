@@ -110,8 +110,7 @@ def main():
     ml_parser.add_argument(
         "-e", "--export",
         choices=['1', '2', '3'],
-        default='1',
-        help="Export results (default: 1)"
+        help="Export kfold"
     )
 
     # ===== DL SUBPARSER =====
@@ -142,6 +141,7 @@ def main():
     )
 
     args = parser.parse_args()
+    print(args)
 
     # Handle modes
     if args.mode == "analyze":
@@ -233,13 +233,16 @@ def run_ml(args):
     if args.scenario is None:
         print("Error: --scenario (scenario) required for ML mode.")
         return
+    if args.kfold is None:
+        print("Error: --kfold (k) required for ML mode.")
+        return
 
     import task1
     task1.run_from_toolbox(
         model=args.model,
         scenario=args.scenario,
-        k=args.k,
-        export=args.e
+        k=args.kfold,
+        export=args.export
     )
 
 def run_dl(args):

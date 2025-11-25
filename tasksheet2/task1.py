@@ -149,7 +149,7 @@ def _internal_main(args):
     # Validate: one-class models use only scenario 1, supervised models need scenario 2 or 3
     one_class_models = ['ocsvm', 'lof', 'ee']
     supervised_models = ['knn', 'svm', 'rf']
-    print(args)
+
     if args.model in one_class_models:
         args.scenario = '1'  # Force scenario 1 for one-class models
     elif args.model in supervised_models:
@@ -184,22 +184,22 @@ def _internal_main(args):
     # Run selected model
     #TODO pass kfold indices to model functions
     if args.model == 'ocsvm':
-        results = run_OneClassSVM(X, y, scenario_fn)
+        results = run_OneClassSVM(X, y, args.kfold, scenario_fn)
         out_dir = f"exports/Scenario{args.scenario}/OCSVM"
     elif args.model == 'lof':
-        results = run_LOF(X, y, scenario_fn)
+        results = run_LOF(X, y, args.kfold, scenario_fn)
         out_dir = f"exports/Scenario{args.scenario}/LOF"
     elif args.model == 'ee':
-        results = run_EllipticEnvelope(X, y, scenario_fn)
+        results = run_EllipticEnvelope(X, y, args.kfold, scenario_fn)
         out_dir = f"exports/Scenario{args.scenario}/EllipticEnvelope"
     elif args.model == 'svm':
-        results = run_binary_svm(X, y, scenario_fn)
+        results = run_binary_svm(X, y, args.kfold, scenario_fn)
         out_dir = f"exports/Scenario{args.scenario}/SVM"
     elif args.model == 'knn':
-        results = run_knn(X, y, scenario_fn=scenario_fn)
+        results = run_knn(X, y, args.kfold, scenario_fn)
         out_dir = f"exports/Scenario{args.scenario}/kNN"
     elif args.model == 'rf':
-        results = run_random_forest(X, y, scenario_fn)
+        results = run_random_forest(X, y, args.kfold, scenario_fn)
         out_dir = f"exports/Scenario{args.scenario}/RandomForest"
     else:
         print(f"Unknown model: {args.model}")
