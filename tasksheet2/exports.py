@@ -31,10 +31,6 @@ def export_scenario_2(merged_df, X, y, scenario_fn, attack_type, attack_interval
         - Hold ONE attack type out of training
         - Train on normal + (n-1) attack types
         - Test on normal fold + ALL attack types
-    Creates folders:
-        Scenario2/HeldOut_AttackType_1/
-        Scenario2/HeldOut_AttackType_2/
-        ...
     """
 
     print("\n=== Exporting Scenario 2 Splits ===")
@@ -46,9 +42,9 @@ def export_scenario_2(merged_df, X, y, scenario_fn, attack_type, attack_interval
         folder = f"{out_dir}/HeldOut_AttackType_{held_out}"
         os.makedirs(folder, exist_ok=True)
 
-        for fold_idx, attack_id, train_idx, test_idx in scenario_fn(
-            X, y, attack_type, attack_intervals
-        ):
+        # IMPORTANT FIX: call scenario function correctly
+        for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, attack_type, attack_intervals):
+            
             if attack_id != held_out:
                 continue
 
@@ -64,16 +60,12 @@ def export_scenario_2(merged_df, X, y, scenario_fn, attack_type, attack_interval
             print(f"[HeldOut={held_out}] Saved: {train_file} | {test_file}")
 
 
-def export_scenario_3(merged_df, X, y,scenario_fn, attack_type, attack_intervals,
+def export_scenario_3(merged_df, X, y, scenario_fn, attack_type, attack_intervals,
                       out_dir="exports/Scenario3"):
     """
     Scenario 3:
         - Train on normal + EXACTLY ONE attack type
         - Test on normal fold + ALL attack types
-    Creates folders:
-        Scenario3/TrainOn_AttackType_1/
-        Scenario3/TrainOn_AttackType_2/
-        ...
     """
 
     print("\n=== Exporting Scenario 3 Splits ===")
@@ -85,9 +77,9 @@ def export_scenario_3(merged_df, X, y,scenario_fn, attack_type, attack_intervals
         folder = f"{out_dir}/TrainOn_AttackType_{selected}"
         os.makedirs(folder, exist_ok=True)
 
-        for fold_idx, attack_id, train_idx, test_idx in scenario_fn(
-            X, y, attack_type, attack_intervals
-        ):
+        # IMPORTANT FIX: call scenario function correctly
+        for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, attack_type, attack_intervals):
+            
             if attack_id != selected:
                 continue
 
@@ -115,7 +107,6 @@ def export_model_output(merged_df, test_idx, y_pred, out_file):
     output_df.to_csv(out_file, index=False)
     print(f"Model output exported to: {out_file}")
     
-    # Print summary statistics
     print("\n=== Prediction Summary ===")
     print(f"Total test samples: {len(y_pred)}")
     print(f"Detected attacks: {(y_pred == 1).sum()}")

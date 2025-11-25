@@ -1,252 +1,217 @@
 import numpy as np
-from sklearn.svm import OneClassSVM
+
+from sklearn.svm import OneClassSVM, SVC
 from sklearn.covariance import EllipticEnvelope
-from sklearn.neighbors import LocalOutlierFactor
-from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import LocalOutlierFactor, KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.decomposition import PCA
-from utils import optimal_param_search
+
+from utils import optimal_param_search  # kept in case you use it later
+
 
 def run_OneClassSVM(X, y, scenario_fn):
+    """
+    One-Class SVM for Scenario 1 (one-class setting).
+    scenario_fn(X, y) must yield: (fold_idx, train_idx, test_idx)
+    """
+    best_params_ocsvm = {'nu': 0.001, 'gamma': 'scale'}
+    all_fold_predictions = []
 
-    # param_grid_ocsvm = {
-    # 'nu': [0.001], # 0.01, 0.05 
-    # 'gamma': ['scale'] # 0.1 0.01, 0.001 
-    # }
-
-    # def build_ocsvm(params):
-    #     return OneClassSVM(kernel='rbf', **params)
-    # print("searching optimal parameters for One-Class SVM...")
-    # best_params_ocsvm, results_ocsvm = optimal_param_search(X, y, scenario_fn, build_ocsvm, param_grid_ocsvm) 
-    # print("Best parameters found for One-Class SVM:", best_params_ocsvm)
-    best_params_ocsvm = {'nu': 0.001, 'gamma': 'scale'}  # Pre-determined best params
-    all_fold_predictions = []   # store for later if needed
-    # nu: 0.001, gamma: scale
     pca = PCA(n_components=0.95)
-    for fold_idx, train_idx, test_idx in scenario_fn(X, y):
 
-        #xtest is feature data used to testing
-        X_train , X_test = X.iloc[train_idx] , X.iloc[test_idx]    # labeled      # normal fold + all attacks
-        y_test  = y.iloc[test_idx] # test set for current fold # binary label of testing attack or no 
-        print(f"Training One-Class SVM with params: {best_params_ocsvm} on fold {fold_idx+1}...")
+    for fold_idx, train_idx, test_idx in scenario_fn(X, y):
+        X_train = X.iloc[train_idx]
+        X_test = X.iloc[test_idx]
+        y_test = y.iloc[test_idx]
+
+        print(f"Training One-Class SVM with params: {best_params_ocsvm} on fold {fold_idx + 1}...")
         X_train_reduced = pca.fit_transform(X_train)
         X_test_reduced = pca.transform(X_test)
-        ocsvm = OneClassSVM(kernel='rbf', **best_params_ocsvm)  # best_params_ocsvm
-        ocsvm.fit(X_train_reduced)
-        print(f"Predicting on test set for fold {fold_idx+1}...")
-        # OC-SVM outputs: +1 normal, -1 anomaly
-        y_pred_raw = ocsvm.predict(X_test_reduced)
 
-        # Map: -1 → attack(1), 1 → normal(0)
+        ocsvm = OneClassSVM(kernel='rbf', **best_params_ocsvm)
+        ocsvm.fit(X_train_reduced)
+
+        print(f"Predicting on test set for fold {fold_idx + 1}...")
+        y_pred_raw = ocsvm.predict(X_test_reduced)          # +1 normal, -1 anomaly
+        y_pred = np.where(y_pred_raw == -1, 1, 0)           # 1 = attack, 0 = normal
+
+        acc = np.mean(y_pred == y_test)
+        print(f"Fold {fold_idx + 1}: Accuracy = {acc:.4f} | Train={len(train_idx)} | Test={len(test_idx)}")
+
+        all_fold_predictions.append((fold_idx, test_idx, y_pred, y_test.values))
+
+    return all_fold_predictions
+
+
+def run_EllipticEnvelope(X, y, scenario_fn):
+    """
+    EllipticEnvelope for Scenario 1.
+    scenario_fn(X, y) must yield: (fold_idx, train_idx, test_idx)
+    """
+    best_params_ee = {'contamination': 0.001, 'support_fraction': None}
+    all_fold_predictions = []
+
+    pca = PCA(n_components=0.95)
+
+    for fold_idx, train_idx, test_idx in scenario_fn(X, y):
+        X_train = X.iloc[train_idx]
+        X_test = X.iloc[test_idx]
+        y_test = y.iloc[test_idx]
+
+        X_train_reduced = pca.fit_transform(X_train)
+        X_test_reduced = pca.transform(X_test)
+
+        ee = EllipticEnvelope(**best_params_ee, random_state=42)
+        print(f"Training EllipticEnvelope with params: {best_params_ee} on fold {fold_idx + 1}...")
+        ee.fit(X_train_reduced)
+
+        y_pred_raw = ee.predict(X_test_reduced)             # +1 normal, -1 outlier
         y_pred = np.where(y_pred_raw == -1, 1, 0)
 
         acc = np.mean(y_pred == y_test)
-        print(f"Fold {fold_idx+1}: Accuracy = {acc:.4f} | Train={len(train_idx)} | Test={len(test_idx)}")
+        print(f"Fold {fold_idx + 1}: EllipticEnvelope Accuracy = {acc:.4f} | "
+              f"Train={len(train_idx)} | Test={len(test_idx)}")
 
-        # Save fold results
         all_fold_predictions.append((fold_idx, test_idx, y_pred, y_test.values))
 
     return all_fold_predictions
 
-def run_EllipticEnvelope(X, y, scenario_fn, contamination=0.01):
-    # param_grid_ee = {
-    # 'contamination': [0.001, 0.01, 0.05],
-    # 'support_fraction': [None, 0.7, 0.9]
-    # }
 
-    # def build_elliptic(params):
-    #     return EllipticEnvelope(**params, random_state=42)
-    
-    # best_params_ee, results_ee = optimal_param_search(X, y, scenario_fn, build_elliptic, param_grid_ee)
-
-    best_params_ee = {'contamination': 0.001, 'support_fraction': None}  # Pre-determined best params
-    all_fold_predictions = []
-
-    pca = PCA(n_components=0.95)  # Keep 95% of variance
-
-    for fold_idx, train_idx, test_idx in scenario_fn(X, y):
-
-        X_train = X.iloc[train_idx]        # normal only
-        X_test  = X.iloc[test_idx]         # normal fold + all attacks
-        y_test  = y.iloc[test_idx]
-
-        X_train_reduced = pca.fit_transform(X_train)
-        X_test_reduced = pca.transform(X_test)
-        # Create model
-        ee = EllipticEnvelope(**best_params_ee, random_state=42) # gives warning due to high demensionality
-        print(f"Training EllipticEnvelope with params: {best_params_ee} on fold {fold_idx+1}...")   
-        # Fit ONLY normal
-        ee.fit(X_train_reduced)
-
-        # Predict on test
-        y_pred_raw = ee.predict(X_test_reduced)   # +1 normal, -1 outlier
-        y_pred = np.where(y_pred_raw == -1, 1, 0)   # convert to 0/1
-
-        # Accuracy
-        acc = np.mean(y_pred == y_test)
-        print(f"Fold {fold_idx+1}: EllipticEnvelope Accuracy = {acc:.4f} | Train={len(train_idx)} | Test={len(test_idx)}")
-
-        # Store for later
-        all_fold_predictions.append((fold_idx, test_idx, y_pred, y_test.values))
-
-    return all_fold_predictions
-
-def run_LOF(X, y, scenario_fn, n_neighbors=20):
-    # param_grid_lof = {
-    # 'n_neighbors': [10, 20, 30, 50],
-    # 'metric': ['euclidean', 'manhattan']
-    # }
-
-    # def build_lof(params):
-    #     return LocalOutlierFactor( novelty=True,**params)
-    
-    # best_params_lof, results_lof = optimal_param_search(X, y, scenario_fn, build_lof, param_grid_lof)
-
-    best_params_lof = {'n_neighbors': 20, 'metric': 'euclidean'}  # Pre-determined best params
+def run_LOF(X, y, scenario_fn):
+    """
+    Local Outlier Factor for Scenario 1.
+    scenario_fn(X, y) must yield: (fold_idx, train_idx, test_idx)
+    """
+    best_params_lof = {'n_neighbors': 20, 'metric': 'euclidean'}
     all_fold_predictions = []
 
     pca = PCA(n_components=0.95)
 
     for fold_idx, train_idx, test_idx in scenario_fn(X, y):
+        X_train = X.iloc[train_idx]
+        X_test = X.iloc[test_idx]
+        y_test = y.iloc[test_idx]
 
-        X_train = X.iloc[train_idx]      # normal only
-        X_test  = X.iloc[test_idx]       # normal + attack
-        y_test  = y.iloc[test_idx]
-
-        # LOF model (novelty=True allows .predict on X_test)
         lof = LocalOutlierFactor(
             **best_params_lof,
             novelty=True
         )
-        X_train_reduced = pca.fit_transform(X_train) #computes the PCA parameters (mean, components, etc.) from the training data and applies the transformation.
-        X_test_reduced = pca.transform(X_test) #uses the already-computed PCA parameters from the training data to transform the test data.
-        print(f"Training LOF with params: {best_params_lof} on fold {fold_idx+1}...")
-        # Fit ONLY normal samples
-        lof.fit(X_train_reduced)
-
-        # Predict on test
-        y_pred_raw = lof.predict(X_test_reduced)     # +1 normal, -1 outlier
-        y_pred = np.where(y_pred_raw == -1, 1, 0)
-
-        # Accuracy
-        acc = np.mean(y_pred == y_test)
-        print(f"Fold {fold_idx+1}: LOF Accuracy = {acc:.4f} | Train={len(train_idx)} | Test={len(test_idx)}")
-
-        # Store results
-        all_fold_predictions.append((fold_idx, test_idx, y_pred, y_test.values))
-
-    return all_fold_predictions
-
-def run_binary_svm(X, y,scenario_fn):
-     
-    # param_grid_binary_svm = {
-    # 'C': [0.1, 1, 10],
-    # 'gamma': ['scale', 0.01, 0.001]
-    # }
-    # def build_binary_svm(C=1.0, gamma='scale', kernel='rbf'):
-    #     return SVC(C=C, gamma=gamma, kernel=kernel)
-    # best_params_svm, results_svm = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y,attack_type,attack_intervals), build_binary_svm, param_grid_binary_svm)
-    best_params_svm = {'C': 0.1, 'gamma': 'scale'}  # Pre-determined best params
-    svm_predictions = []
-    pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
-
-        X_train = X.iloc[train_idx]
-        X_test  = X.iloc[test_idx]
-        y_train = y.iloc[train_idx]
-        y_test  = y.iloc[test_idx]
 
         X_train_reduced = pca.fit_transform(X_train)
         X_test_reduced = pca.transform(X_test)
 
-        model = SVC(**best_params_svm, kernel='rbf') #class_weight='balanced'
+        print(f"Training LOF with params: {best_params_lof} on fold {fold_idx + 1}...")
+        lof.fit(X_train_reduced)
+
+        y_pred_raw = lof.predict(X_test_reduced)            # +1 normal, -1 outlier
+        y_pred = np.where(y_pred_raw == -1, 1, 0)
+
+        acc = np.mean(y_pred == y_test)
+        print(f"Fold {fold_idx + 1}: LOF Accuracy = {acc:.4f} | "
+              f"Train={len(train_idx)} | Test={len(test_idx)}")
+
+        all_fold_predictions.append((fold_idx, test_idx, y_pred, y_test.values))
+
+    return all_fold_predictions
+
+
+def run_binary_svm(X, y, scenario_fn):
+    """
+    Binary SVM for Scenario 2 & 3.
+    scenario_fn(X, y) must yield: (fold_idx, attack_id, train_idx, test_idx)
+    """
+    # More aggressive C and class_weight='balanced' to avoid predicting only normal
+    best_params_svm = {
+        'C': 10.0,
+        'gamma': 'scale',
+        'kernel': 'rbf',
+        'class_weight': 'balanced'
+    }
+
+    svm_predictions = []
+    pca = PCA(n_components=0.95)
+
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
+        X_train = X.iloc[train_idx]
+        X_test = X.iloc[test_idx]
+        y_train = y.iloc[train_idx]
+        y_test = y.iloc[test_idx]
+
+        X_train_reduced = pca.fit_transform(X_train)
+        X_test_reduced = pca.transform(X_test)
+
+        model = SVC(**best_params_svm)
         model.fit(X_train_reduced, y_train)
 
         y_pred = model.predict(X_test_reduced)
         acc = (y_pred == y_test).mean()
 
-        print(f"Fold {fold_idx+1}, AttackID={attack_id}: Accuracy={acc:.4f} | Train={len(train_idx)}, Test={len(test_idx)}")
+        print(f"Fold {fold_idx + 1}, AttackID={attack_id}: Accuracy={acc:.4f} | "
+              f"Train={len(train_idx)}, Test={len(test_idx)}")
 
         svm_predictions.append((fold_idx, attack_id, test_idx, y_pred, y_test.values))
 
     return svm_predictions
 
+
 def run_knn(X, y, scenario_fn):
-
-    # def build_knn(params):
-    #     return KNeighborsClassifier(
-    #     n_neighbors=params['n_neighbors'],
-    #     weights=params['weights'],
-    #     metric=params['metric']
-    #     )
-
-    # param_grid_knn = {
-    # 'n_neighbors': [3, 5, 7, 11],       # odd numbers → avoid ties
-    # 'weights': ['uniform', 'distance'], # common choices
-    # 'metric': ['euclidean', 'manhattan'] # standard distances
-    # }
-    # best_params_knn, results_knn = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y,attack_type,attack_intervals), build_knn, param_grid_knn)
-
+    """
+    kNN for Scenario 2 & 3.
+    scenario_fn(X, y) must yield: (fold_idx, attack_id, train_idx, test_idx)
+    """
     best_params_knn = {'n_neighbors': 3, 'weights': 'uniform', 'metric': 'euclidean'}
     all_predictions = []
-    pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
 
+    pca = PCA(n_components=0.95)
+
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
         X_train = X.iloc[train_idx]
-        X_test  = X.iloc[test_idx]
+        X_test = X.iloc[test_idx]
         y_train = y.iloc[train_idx]
-        y_test  = y.iloc[test_idx]
-        
+        y_test = y.iloc[test_idx]
+
         X_train_reduced = pca.fit_transform(X_train)
         X_test_reduced = pca.transform(X_test)
 
         model = KNeighborsClassifier(**best_params_knn)
-
         model.fit(X_train_reduced, y_train)
+
         y_pred = model.predict(X_test_reduced)
         acc = (y_pred == y_test).mean()
-        print(f"Fold {fold_idx+1}, AttackID={attack_id}: kNN Accuracy={acc:.4f}")
+
+        print(f"Fold {fold_idx + 1}, AttackID={attack_id}: kNN Accuracy={acc:.4f}")
 
         all_predictions.append((fold_idx, attack_id, test_idx, y_pred, y_test.values))
 
     return all_predictions
 
-def run_random_forest(X, y, attack_type, attack_intervals, scenario_fn, params):
 
-    # def build_rf(params):
-    #     return RandomForestClassifier(
-    #     n_estimators=params['n_estimators'],
-    #     max_depth=params['max_depth'],
-    #     min_samples_split=params['min_samples_split'],
-    #     random_state=42,
-    #     n_jobs=-1     # use all cores
-    #     )
-
-    # param_grid_rf = {
-    # 'n_estimators': [50, 100, 200],
-    # 'max_depth': [5, 10, None],
-    # 'min_samples_split': [2, 5]
-    # }
-    # best_params_rf, results_rf = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y,attack_type,attack_intervals), build_rf, param_grid_rf)
-
+def run_random_forest(X, y, scenario_fn):
+    """
+    Random Forest for Scenario 2 & 3.
+    scenario_fn(X, y) must yield: (fold_idx, attack_id, train_idx, test_idx)
+    """
     best_params_rf = {'n_estimators': 50, 'max_depth': 5, 'min_samples_split': 5}
     all_predictions = []
-    pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, attack_type, attack_intervals):
 
+    pca = PCA(n_components=0.95)
+
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y):
         X_train = X.iloc[train_idx]
-        X_test  = X.iloc[test_idx]
+        X_test = X.iloc[test_idx]
         y_train = y.iloc[train_idx]
-        y_test  = y.iloc[test_idx]
+        y_test = y.iloc[test_idx]
+
         X_train_reduced = pca.fit_transform(X_train)
         X_test_reduced = pca.transform(X_test)
-        model = RandomForestClassifier(**best_params_rf, random_state=42)
 
+        model = RandomForestClassifier(**best_params_rf, random_state=42, n_jobs=-1)
         model.fit(X_train_reduced, y_train)
+
         y_pred = model.predict(X_test_reduced)
         acc = (y_pred == y_test).mean()
-        print(f"Fold {fold_idx+1}, AttackID={attack_id}: Random Forest Accuracy={acc:.4f}")
+
+        print(f"Fold {fold_idx + 1}, AttackID={attack_id}: Random Forest Accuracy={acc:.4f}")
 
         all_predictions.append((fold_idx, attack_id, test_idx, y_pred, y_test.values))
 
