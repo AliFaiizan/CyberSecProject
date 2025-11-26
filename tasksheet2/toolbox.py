@@ -47,98 +47,45 @@ def main():
     if "-h" in sys.argv or "--help" in sys.argv:
         print_help()
         sys.exit(0)
-    
+
     parser = argparse.ArgumentParser(
         description="ICS Security Toolbox - Integrated Analysis and ML Detection",
         add_help=False
     )
     subparsers = parser.add_subparsers(dest="mode", required=True, help="Select operation mode")
 
-    # ===== ANALYZE SUBPARSER =====
+    # ===== ANALYZE =====
     analyze_parser = subparsers.add_parser("analyze", help="Run dataset analysis (Task Sheet 1)")
-    analyze_parser.add_argument(
-        "--dataset",
-        choices=DATASET_CONFIG.keys(),
-        required=True,
-        help="Dataset version to analyze"
-    )
+    analyze_parser.add_argument("--dataset", choices=DATASET_CONFIG.keys(), required=True)
 
-    # ===== SIMILARITY SUBPARSER =====
-    similarity_parser = subparsers.add_parser("similarity", help="Run similarity analysis (spearman, t-SNE, PCA)")
-    similarity_parser.add_argument(
-        "--dataset",
-        choices=DATASET_CONFIG.keys(),
-        required=True,
-        help="Dataset version for similarity analysis"
-    )
+    # ===== SIMILARITY =====
+    similarity_parser = subparsers.add_parser("similarity", help="Run similarity analysis")
+    similarity_parser.add_argument("--dataset", choices=DATASET_CONFIG.keys(), required=True)
 
-    # ===== NGRAM SUBPARSER =====
+    # ===== NGRAM =====
     ngram_parser = subparsers.add_parser("ngram", help="Run n-gram based detection")
-    ngram_parser.add_argument(
-        "--dataset",
-        choices=DATASET_CONFIG.keys(),
-        required=True,
-        help="Dataset version for n-gram analysis"
-    )
-    ngram_parser.add_argument(
-        "--ngram-order",
-        type=int,
-        default=2,
-        help="N-gram order (default: 2)"
-    )
+    ngram_parser.add_argument("--dataset", choices=DATASET_CONFIG.keys(), required=True)
+    ngram_parser.add_argument("--ngram-order", type=int, default=2)
 
-    # ===== ML SUBPARSER =====
+    # ===== ML =====
     ml_parser = subparsers.add_parser("ml", help="Run machine learning detection (Task Sheet 2)")
-    ml_parser.add_argument(
-        "-m", "--model",
-        choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'],
-        required=True,
-        help="Machine learning model"
-    )
-    ml_parser.add_argument(
-        "-sc", "--scenario",
-        choices=['1', '2', '3'],
-        required=True,
-        help="Cross-validation scenario"
-    )
-    ml_parser.add_argument(
-        "-k", "--kfold",
-        type=int,
-        default=5,
-        help="Number of folds (default: 5)"
-    )
-    ml_parser.add_argument(
-        "-e", "--export",
-        choices=['1', '2', '3'],
-        help="Export kfold"
-    )
+    ml_parser.add_argument("-m", "--model", choices=['ocsvm','lof','ee','knn','svm','rf'], required=True)
+    ml_parser.add_argument("-sc", "--scenario", choices=['1','2','3'], required=True)
+    ml_parser.add_argument("-k", "--kfold", type=int, default=5)
+    ml_parser.add_argument("-e", "--export", choices=['1','2','3'])
 
-    # ===== DL SUBPARSER =====
-    dl_parser = subparsers.add_parser("dl", help="Run deep learning detection (Task Sheet 2)")
-    dl_parser.add_argument(
-        "-sc",
-        "--scenario",
-        required=True,
-        choices=['1', '2', '3'],
-        help="Scenario number 1 | 2 | 3",
-    )
-    dl_parser.add_argument(
-        "-M",
-        "--window-size",
-        required=True,
-        help="Window size M (rows per CNN input)",
-    )
-    dl_parser.add_argument(
-        "-e",
-        "--epochs",
-        default=5,
-        help="Maximum training epochs",
-    )
-    dl_parser.add_argument(
-        "--stride",
-        default=10,
-        help="Stride for training windows (default=10, use 1 for max overlap)",
-    )
+    # ===== DL =====
+    dl_parser = subparsers.add_parser("dl", help="Run deep learning CNN (Task Sheet 2)")
+    dl_parser.add_argument("-sc", "--scenario", required=True, choices=['1','2','3'])
+    dl_parser.add_argument("-M", "--window-size", required=True)
+    dl_parser.add_argument("-e", "--epochs", default=5)
+    dl_parser.add_argument("--stride", default=10)
+
+    # ===== ENSEMBLE =====
+    ensemble_parser = subparsers.add_parser("ensemble", help="Run Task 2 Ensemble Classifier")
+    ensemble_parser.add_argument("-sc", "--scenario", required=True, choices=['1','2','3'])
+    ensemble_parser.add_argument("-m", "--method", required=True, choices=["random","majority","all"])
+    ensemble_parser.add_argument("-f", "--fold", required=True, type=int)
 
     args = parser.parse_args()
     print(args)
@@ -156,9 +103,12 @@ def main():
 
     elif args.mode == "ml":
         run_ml(args)
-    
+
     elif args.mode == "dl":
         run_dl(args)
+
+    elif args.mode == "ensemble":
+        run_ensemble(args)
 
     else:
         print("Unknown mode")
@@ -173,37 +123,39 @@ def run_task1(script):
 
 
 def run_similarity(dataset_name):
+    # modify files inside similarity_analysis/
     modify_spearman(dataset_name)
     modify_tsne(dataset_name)
     modify_pca(dataset_name)
 
-    os.system("python spearman_distance.py")
-    os.system("python histogram.py")
-    os.system("python task2c.py")
-    os.system("python task2d.py")
-
+    # run modules inside the folder
+    os.system("python similarity_analysis/spearman_distance.py")
+    os.system("python similarity_analysis/histogram.py")
+    os.system("python similarity_analysis/task2c.py")
+    os.system("python similarity_analysis/task2d.py")
 
 def modify_spearman(version):
-    with open("spearman_distance.py", "r") as f:
+    path = "similarity_analysis/spearman_distance.py"
+    with open(path, "r") as f:
         txt = f.read()
     txt = re.sub(r'version\s*=\s*".*"', f'version = \"{version}\"', txt)
-    with open("spearman_distance.py", "w") as f:
+    with open(path, "w") as f:
         f.write(txt)
-
 
 def modify_tsne(version):
-    with open("task2c.py", "r") as f:
+    path = "similarity_analysis/task2c.py"
+    with open(path, "r") as f:
         txt = f.read()
     txt = re.sub(r'versions\s*=\s*\[.*?\]', f'versions = [\"{version}\"]', txt)
-    with open("task2c.py", "w") as f:
+    with open(path, "w") as f:
         f.write(txt)
 
-
 def modify_pca(version):
-    with open("task2d.py", "r") as f:
+    path = "similarity_analysis/task2d.py"
+    with open(path, "r") as f:
         txt = f.read()
     txt = re.sub(r'versions\s*=\s*\[.*?\]', f'versions = [\"{version}\"]', txt)
-    with open("task2d.py", "w") as f:
+    with open(path, "w") as f:
         f.write(txt)
 
 
@@ -247,18 +199,23 @@ def run_ml(args):
 
 def run_dl(args):
     print("\nRunning Task Sheet 2 – Deep Learning (Task 2)")
-
-    if args.scenario is None:
-        print("Error: --scenario (scenario) required for DL mode.")
-        return
-
     import task2
     task2.run_from_toolbox(
         scenario=args.scenario,
-        M=args.M,
+        M=args.window_size,
         epochs=args.epochs,
         stride=args.stride
     )
+
+def run_ensemble(args):
+    print("\nRunning Task Sheet 2 – Ensemble Classifier")
+    import task2_ensemble
+    task2_ensemble.run_from_toolbox(
+        scenario=args.scenario,
+        method=args.method,
+        fold=args.fold
+    )
+
 
 # ==============================================================
 # HELP
@@ -270,30 +227,20 @@ ICS Security Toolbox
 
 Usage: python toolbox.py <mode> [options]
 
-Available Modes:
+Modes:
+  analyze     – Dataset statistical analysis
+  similarity  – Spearman / PCA / t-SNE
+  ngram       – N-gram anomaly detection
+  ml          – Traditional ML (Task 2)
+  dl          – Deep Learning CNN (Task 2)
+  ensemble    – Ensemble ML Classifier (Task 2)
 
-1. ANALYZE (Ks-statistic , ccdfs ):
-   python toolbox.py analyze --dataset <name>
+Examples:
+  python toolbox.py ml -m ocsvm -sc 1 -k 5
+  python toolbox.py dl -sc 2 -M 50 -e 5 --stride 10
+  python toolbox.py ensemble -sc 2 -m majority -f 3
+""")
 
-2. SIMILARITY (Spearman, t-SNE, PCA):
-   python toolbox.py similarity --dataset <name>
-
-3. NGRAM (N-gram anomly Detection):
-   python toolbox.py ngram --dataset <name> --ngram-order <number>
-          
-4. ML (Traditional Classifiers - Task Sheet 2):
-   python toolbox.py ml -m <model> -sc <scenario> -k <kfold>
-   python toolbox.py ml -e <scenario_number> (exports scenario folds)
-
-5. DL (Deep Learning CNN - Task Sheet 2):
-    python toolbox.py dl -sc <scenario> -M <window_size> -e <epochs> --stride <stride>
-
-Models: one class svm (ocsvm), Local outlier factor (lof), Elliptic Envelope (ee), k-nearest neighbors (knn), Support Vector Machine (svm), Random Forest (rf)
-Scenarios: 1 only for one class models; 2 or 3 for supervised models
-
-
-"""
-)
 
 if __name__ == "__main__":
     main()
