@@ -101,3 +101,35 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
 
     print("\nBEST PARAMS:", best_params, "Score:", best_score)
     return best_params, results
+
+def get_balanced_attack_indices(attack_type):
+    """
+    Returns a balanced set of attack sample indices.
+    Each attack type contributes the same number of samples.
+
+    attack_type: array-like of shape (n_samples,)
+        attack_type[i] = 0 (normal) or attack_typeID (1,2,3,...)
+
+    Returns:
+        balanced_attack_idx: np.array of indices
+    """
+
+    # attack type = 0 is normals --> get unique attack types [1,2,3,...]
+    attack_types = np.unique(attack_type[attack_type != 0])
+
+    attack_by_type = {
+        a: np.where(attack_type == a)[0] for a in attack_types # find all indices where attack_type equals a
+    }
+
+    # find the smallest number of samples among all attack types
+    min_count = min(len(idx_list) for idx_list in attack_by_type.values())
+
+    balanced_list = []
+    for a, idx_list in attack_by_type.items(): # idx_list contains all indices for attack type a
+        chosen = np.random.choice(idx_list, min_count, replace=False) # randomly select min_count samples from each attack type without replacement
+        balanced_list.append(chosen)
+
+    # 5. Combine into a single array
+    balanced_attack_idx = np.concatenate(balanced_list)
+
+    return balanced_attack_idx

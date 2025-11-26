@@ -3,8 +3,9 @@
 .DS_Store
 .venv
 .vscode
+__pycache__/
 */__pycache__/
 *.png
 *.zip
 datasets/*
-tasksheet2/exports/*
+tasksheet2/exports/

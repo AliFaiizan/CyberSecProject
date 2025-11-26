@@ -1,5 +1,5 @@
 import os
-from utils import load_and_clean_data
+from utils import load_and_clean_data, get_balanced_attack_indices
 from exports import export_model_output
 from glob import glob
 import numpy as np
@@ -24,8 +24,8 @@ def extract_attack_types(y: pd.Series):
     prev = y_bin.shift(1, fill_value=0)
     change = y_bin - prev
     
-    # Attack start and end indices
-    start_idx = y_bin.index[change == 1].tolist()
+    # Attack start and end indices # 0 indicate no state change
+    start_idx = y_bin.index[change == 1].tolist() 
     end_idx   = y_bin.index[change == -1].tolist()
     
     # If the last row is still attack, close it
@@ -42,7 +42,7 @@ def extract_attack_types(y: pd.Series):
     # Create per-row attack_type
     attack_type = pd.Series(0, index=y_bin.index, dtype=int)
     for i, row in intervals.iterrows():
-        attack_type.loc[row.start_index:row.end_index] = row.attack_id
+        attack_type.loc[row.start_index:row.end_index] = row.attack_id # attack_type.loc[2:4] = 1
     
     return attack_type, intervals
 
@@ -67,24 +67,20 @@ def scenario_1_split(X, y, k=5, seed=42, balance_attacks=False):
       Train on normal data only.
       Test on normal (current fold) + all attack samples.
     """
-    normal_idx = np.where(y == 0)[0] # returns indices where condition is met ( taking normal data indices)
-    attack_idx = np.where(y == 1)[0]
+    attack_type, attack_intervals = extract_attack_types(y)
+
+    normal_idx = np.where(y == 0)[0] # tuple returns indices for normal ( taking normal data indices)
+    balanced_attack_idx = get_balanced_attack_indices(attack_type)
+
     folds = make_kfold_indices(len(normal_idx), k, seed)
 
     for fold_idx in range(k):
         test_normal_idx = normal_idx[folds[fold_idx]] # pick normal test samples for current fold
         train_normal_idx = np.setdiff1d(normal_idx, test_normal_idx) # pick whatever normal samples are not in test set
 
-        # Optionally balance attack samples in test
-        if balance_attacks:
-            n_attack = len(test_normal_idx)
-            attack_sample_idx = np.random.choice(attack_idx, n_attack, replace=False)
-        else:
-            attack_sample_idx = attack_idx
-
-        test_idx = np.concatenate([test_normal_idx, attack_sample_idx]) # both normal and attack samples in test set
-        train_idx = train_normal_idx # only normal samples in train set
-
+        train_idx = train_normal_idx                           # no attacks in training
+        test_idx  = np.concatenate([test_normal_idx,           # normal fold
+                                    balanced_attack_idx])      # balanced attack samples
         yield fold_idx, train_idx, test_idx
 
 def scenario_2_split(X, y, k=5, seed=42):
@@ -99,7 +95,21 @@ def scenario_2_split(X, y, k=5, seed=42):
     np.random.seed(seed)
 
     normal_idx = np.where(y == 0)[0]
-    attack_ids = attack_intervals["attack_id"].unique() #[1,2,3,4,5]
+    attack_types = np.unique(attack_type[attack_type != 0]) #[1,2,3,4,5]
+    # --- Group indices per attack type ---
+    attack_by_type = {
+        a: np.where(attack_type == a)[0]
+        for a in attack_types
+    }
+    # --- Balance test attack samples ---
+    min_count = min(len(idx_list) for idx_list in attack_by_type.values())
+    balanced_test_attack_idx = []
+    for a, idx_list in attack_by_type.items():
+        chosen = np.random.choice(idx_list, min_count, replace=False)
+        balanced_test_attack_idx.append(chosen)
+
+    balanced_test_attack_idx = np.concatenate(balanced_test_attack_idx)
+
     held_out = np.random.choice(attack_ids) # For simplicity, hold out the first attack type
     folds = make_kfold_indices(len(normal_idx), k=k, seed=seed)
 
@@ -151,6 +161,7 @@ def _internal_main(args):
     supervised_models = ['knn', 'svm', 'rf']
 
     if args.model in one_class_models:
+        print("\n**This model only support scenario 1**")
         args.scenario = '1'  # Force scenario 1 for one-class models
     elif args.model in supervised_models:
         if args.scenario is None or args.scenario == '1':
