@@ -48,9 +48,9 @@ def save_list(folder, sensor_list):
 # Auto-detect base path (Windows / Linux)
 # ---------------------------------------------------------
 if os.name == "nt":  # Windows
-    ROOT = r"C:\Users\Aser\Documents\Study_Project\datasets"
+    ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "datasets"))
 else:  # Linux (Tahiti)
-    ROOT = os.path.expanduser("~/Study_Project/datasets")
+    ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "datasets"))
 
 # ---------------------------------------------------------
 # Main execution

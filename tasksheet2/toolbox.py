@@ -123,6 +123,7 @@ def run_task1(script):
 
 
 def run_similarity(dataset_name):
+    os.system("python similarity_analysis/find_sensors.py")
     # modify files inside similarity_analysis/
     modify_spearman(dataset_name)
     modify_tsne(dataset_name)
@@ -160,18 +161,17 @@ def modify_pca(version):
 
 
 def run_ngram(version, n):
-    with open("task3_21.03.py", "r") as f:
+    with open("./similarity_analysis/task3.py", "r") as f:
         txt = f.read()
 
     txt = re.sub(r"N_GRAM_ORDER\s*=\s*\d+", f"N_GRAM_ORDER = {n}", txt)
     folder = DATASET_CONFIG[version]["folder"]
     txt = re.sub(r'DATA_DIR\s*=\s*r".*"', f'DATA_DIR = r"{folder}"', txt)
 
-    with open("task3_21.03.py", "w") as f:
+    with open("./similarity_analysis/task3.py", "w") as f:
         f.write(txt)
 
-    os.system("python task3_21.03.py")
-
+    os.system("python ./similarity_analysis/task3.py")
 
 # ==============================================================
 # TASK SHEET 2 – TASK 1 (ML)

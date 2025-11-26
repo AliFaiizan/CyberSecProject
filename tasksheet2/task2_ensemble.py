@@ -58,10 +58,10 @@ def main():
 
     # Models per scenario
     if sc == 1:
-        models = ["OCSVM", "LOF", "EE"]
+        models = ["OCSVM", "LOF", "EllipticEnvelope"]
         base   = "exports/Scenario1"
     else:
-        models = ["RF", "KNN", "SVM"]
+        models = ["RandomForest", "kNN", "SVM"]
         base   = f"exports/Scenario{sc}"
 
     preds = []

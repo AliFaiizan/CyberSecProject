@@ -158,11 +158,9 @@ def plot_tsne(embs, labels, colors, color_map, title_suffix, filename_suffix):
 # Main
 # ---------------------------------------------------------
 if __name__ == "__main__":
-    base = (r"C:\Users\Aser\Documents\Study_Project\datasets"
-            if os.name == "nt"
-            else "/home/safiamed/Study_Project/datasets")
+    base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "datasets"))
 
-    versions = ["hai-21.03", "hai-22.04", "haiend-23.05"]
+    versions = ["hai-21.03"]
     color_map = {
         "hai-21.03": "tab:blue",
         "hai-22.04": "tab:green",

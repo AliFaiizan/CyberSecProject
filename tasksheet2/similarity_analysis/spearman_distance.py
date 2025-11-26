@@ -130,8 +130,8 @@ def load_dataset(base_path, version):
 # Main entry point
 # ---------------------------------------------------------
 if __name__ == "__main__":
-    base = "/home/safiamed/Study_Project/datasets"
-    version = "haiend-23.05"  # or "hai-21.03", "hai-22.04"
+    base = "../datasets"
+    version = "hai-21.03"
 
     normal_df, attack_df = load_dataset(base, version)
 
