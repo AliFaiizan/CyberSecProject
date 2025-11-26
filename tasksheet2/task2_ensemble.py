@@ -7,7 +7,7 @@ import pandas as pd
 # Ensemble rules
 # ---------------------------------------------------------
 def ensemble(preds_list, method):
-    P = np.vstack(preds_list)    # shape (3, N)
+    P = np.vstack(preds_list)
 
     if method == "random":
         idx = np.random.randint(0, 3, size=P.shape[1])
@@ -24,14 +24,11 @@ def ensemble(preds_list, method):
 
 
 # ---------------------------------------------------------
-# Load a prediction CSV from Task 1
+# Load prediction CSV
 # ---------------------------------------------------------
 def load_pred(path):
     df = pd.read_csv(path)
 
-    # Your files use:
-    #   Attack      -> true label
-    #   predicted_  -> model prediction
     pred_col = "predicted_label"
     true_col = "Attack"
 
@@ -48,13 +45,9 @@ def load_pred(path):
 # ---------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Task 2 Ensemble (Prediction Fusion)")
-    parser.add_argument("-sc", "--scenario", required=True, type=int, choices=[1,2,3],
-                        help="Scenario number: 1 (one-class), 2 or 3 (binary)")
-    parser.add_argument("-m", "--method", required=True,
-                        choices=["random", "majority", "all"],
-                        help="Ensemble method")
-    parser.add_argument("-f", "--fold", required=True, type=int,
-                        help="Fold number")
+    parser.add_argument("-sc", "--scenario", required=True, type=int, choices=[1,2,3])
+    parser.add_argument("-m", "--method", required=True, choices=["random", "majority", "all"])
+    parser.add_argument("-f", "--fold", required=True, type=int)
     args = parser.parse_args()
 
     sc      = args.scenario
@@ -63,9 +56,7 @@ def main():
 
     print(f"\n=== Ensemble | Scenario {sc} | Fold {fold} | Method={method} ===")
 
-    # -----------------------------------------------------
-    # Set model names per scenario
-    # -----------------------------------------------------
+    # Models per scenario
     if sc == 1:
         models = ["OCSVM", "LOF", "EE"]
         base   = "exports/Scenario1"
@@ -73,12 +64,10 @@ def main():
         models = ["RF", "KNN", "SVM"]
         base   = f"exports/Scenario{sc}"
 
-    # -----------------------------------------------------
-    # Load predictions for all models for this fold
-    # -----------------------------------------------------
     preds = []
     true_y = None
 
+    # Load predictions
     for model in models:
         path = f"{base}/{model}/Predictions_Fold{fold}.csv"
 
@@ -87,31 +76,39 @@ def main():
 
         p, y = load_pred(path)
         preds.append(p)
-        true_y = y   # same for all models
+        true_y = y
 
-    # -----------------------------------------------------
     # Apply ensemble rule
-    # -----------------------------------------------------
     final = ensemble(preds, method)
 
-    # -----------------------------------------------------
-    # Save ensemble output
-    # -----------------------------------------------------
+    # Save results
     out_dir = f"{base}/Ensemble"
     os.makedirs(out_dir, exist_ok=True)
 
     out_path = f"{out_dir}/Ensemble_{method}_Fold{fold}.csv"
     pd.DataFrame({"predicted_": final, "Attack": true_y}).to_csv(out_path, index=False)
 
-    # -----------------------------------------------------
     # Summary
-    # -----------------------------------------------------
     print("\n=== Summary ===")
     print("Total samples:", len(final))
     print("Detected attacks:", final.sum())
     print("Normal samples:", len(final) - final.sum())
     print("Accuracy:", (final == true_y).mean())
     print("\nSaved to:", out_path)
+
+
+# ---------------------------------------------------------
+# Make it callable from toolbox
+# ---------------------------------------------------------
+def run_from_toolbox(scenario, method, fold):
+    import sys
+    sys.argv = [
+        "task2_ensemble.py",
+        "-sc", str(scenario),
+        "-m", method,
+        "-f", str(fold),
+    ]
+    main()
 
 
 if __name__ == "__main__":
