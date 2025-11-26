@@ -123,37 +123,39 @@ def run_task1(script):
 
 
 def run_similarity(dataset_name):
+    # modify files inside similarity_analysis/
     modify_spearman(dataset_name)
     modify_tsne(dataset_name)
     modify_pca(dataset_name)
 
-    os.system("python spearman_distance.py")
-    os.system("python histogram.py")
-    os.system("python task2c.py")
-    os.system("python task2d.py")
-
+    # run modules inside the folder
+    os.system("python similarity_analysis/spearman_distance.py")
+    os.system("python similarity_analysis/histogram.py")
+    os.system("python similarity_analysis/task2c.py")
+    os.system("python similarity_analysis/task2d.py")
 
 def modify_spearman(version):
-    with open("spearman_distance.py", "r") as f:
+    path = "similarity_analysis/spearman_distance.py"
+    with open(path, "r") as f:
         txt = f.read()
     txt = re.sub(r'version\s*=\s*".*"', f'version = \"{version}\"', txt)
-    with open("spearman_distance.py", "w") as f:
+    with open(path, "w") as f:
         f.write(txt)
-
 
 def modify_tsne(version):
-    with open("task2c.py", "r") as f:
+    path = "similarity_analysis/task2c.py"
+    with open(path, "r") as f:
         txt = f.read()
     txt = re.sub(r'versions\s*=\s*\[.*?\]', f'versions = [\"{version}\"]', txt)
-    with open("task2c.py", "w") as f:
+    with open(path, "w") as f:
         f.write(txt)
 
-
 def modify_pca(version):
-    with open("task2d.py", "r") as f:
+    path = "similarity_analysis/task2d.py"
+    with open(path, "r") as f:
         txt = f.read()
     txt = re.sub(r'versions\s*=\s*\[.*?\]', f'versions = [\"{version}\"]', txt)
-    with open("task2d.py", "w") as f:
+    with open(path, "w") as f:
         f.write(txt)
 
 
