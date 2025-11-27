@@ -1,6 +1,7 @@
 from typing import List, Tuple
 import pandas as pd
 import numpy as np
+from sklearn.decomposition import PCA
 
 
 def load_and_clean_data(train_files: List[str], test_files: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -59,6 +60,7 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
 
     best_params = None
     best_score = -1
+    acc = None
     results = []
 
     # Create all parameter combinations manually
@@ -66,28 +68,47 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
     keys = list(param_grid.keys())
     values = list(param_grid.values())
     print("Starting Parameter search...")
+
+    pca = PCA(n_components=0.95)
     for combo in itertools.product(*values):
         
         params = dict(zip(keys, combo))
 
         fold_scores = []
 
-        for fold_idx, train_idx, test_idx in scenario_fn(X, y):
-            X_train = X.iloc[train_idx]
-            X_test  = X.iloc[test_idx]
-            y_test  = y.iloc[test_idx]
+        for res in scenario_fn(X, y):
+            if(len(res) == 3):
+                fold_idx, train_idx, test_idx = res
+                X_train = X.iloc[train_idx]
+                X_test  = X.iloc[test_idx]
+                y_test  = y.iloc[test_idx]
 
-            # Create model with current param combo
-            model = model_builder(params)
-            print(f"Fold:{fold_idx} Fitting model with params: {params}")
-            model.fit(X_train)
-            print("Model fitting complete.")
-            # One-class models output +1 (normal) / -1 (attack)
-            raw_pred = model.predict(X_test)
-            y_pred = (raw_pred == -1).astype(int)  # attack=1, normal=0
+                model = model_builder(params)
+                print(f"Fold:{fold_idx} Fitting model with params: {params}")
+                model.fit(X_train)
+                print("Model fitting complete.")
+                # One-class models output +1 (normal) / -1 (attack)
+                raw_pred = model.predict(X_test)
+                y_pred = (raw_pred == -1).astype(int)  # attack=1, normal=0
 
-            acc = np.mean(y_pred == y_test)
-            fold_scores.append(acc)
+                acc = np.mean(y_pred == y_test)
+                fold_scores.append(acc)
+            elif(len(res) == 4):
+                fold_idx, attack_id, train_idx, test_idx = res
+                X_train = X.iloc[train_idx]
+                X_test  = X.iloc[test_idx]
+                y_train = y.iloc[train_idx]
+                y_test  = y.iloc[test_idx]
+                
+                X_train_reduced = pca.fit_transform(X_train)
+                X_test_reduced = pca.transform(X_test)
+
+                model = model_builder(params)
+
+                model.fit(X_train_reduced, y_train)
+                y_pred = model.predict(X_test_reduced)
+                acc = (y_pred == y_test).mean()
+                fold_scores.append(acc)
 
         avg_score = np.mean(fold_scores)
         results.append((params, avg_score))
