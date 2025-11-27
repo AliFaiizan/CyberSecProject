@@ -141,6 +141,23 @@ from models import run_OneClassSVM, run_LOF, run_EllipticEnvelope, run_knn, run_
 
 def _internal_main(args):
 
+    # Load data
+    haiEnd_df = load_and_clean_data(train_files, test_files)
+    X = haiEnd_df.drop(columns=['Attack', 'timestamp'], errors='ignore')
+    y = haiEnd_df['Attack']
+
+    # If export-only mode, just export and exit
+    if args.export:
+        from exports import export_scenario_1, export_scenario_2, export_scenario_3
+        
+        if args.export == '1':
+            export_scenario_1(haiEnd_df, X, y, scenario_1_split, out_dir="exports/Scenario1")
+        elif args.export == '2':
+            export_scenario_2(haiEnd_df, X, y, scenario_2_split, out_dir="exports/Scenario2")
+        elif args.export == '3':
+            export_scenario_3(haiEnd_df, X, y, scenario_3_split, out_dir="exports/Scenario3")
+        return
+
     # Validate: one-class models use only scenario 1, supervised models need scenario 2 or 3
     one_class_models = ['ocsvm', 'lof', 'ee']
     supervised_models = ['knn', 'svm', 'rf']
@@ -153,13 +170,6 @@ def _internal_main(args):
             print("Error: Models 'knn', 'svm', 'rf' require --scenario 2 or 3")
             return
 
-    # Load data as before...
-    
-    haiEnd_df = load_and_clean_data(train_files, test_files) # merge train and test data # merge train and test data
-
-    X = haiEnd_df.drop(columns=['Attack', 'timestamp'], errors='ignore') # label here refers to attack label 0 or 1
-    y = haiEnd_df['Attack']
-
     # Choose scenario function
     if args.scenario == '1':
         scenario_fn = scenario_1_split
@@ -167,15 +177,6 @@ def _internal_main(args):
         scenario_fn = scenario_2_split
     elif args.scenario == '3':
         scenario_fn = scenario_3_split
-
-    from exports import export_scenario_1, export_scenario_2 , export_scenario_3
-
-    if args.export == '1':
-        export_scenario_1(haiEnd_df, X, y, scenario_1_split, out_dir="exports/Scenario1")
-    elif args.export == '2':
-        export_scenario_2(haiEnd_df, X, y, scenario_2_split, out_dir="exports/Scenario2")
-    elif args.export == '3':
-        export_scenario_3(haiEnd_df, X, y, scenario_3_split, out_dir="exports/Scenario3")
 
     # Run selected model
     #TODO pass kfold indices to model functions
@@ -231,11 +232,15 @@ def run_from_toolbox(model, scenario, k=5, export="1"):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--model', choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'], required=True)
+    parser.add_argument('-m', '--model', choices=['ocsvm', 'lof', 'ee', 'knn', 'svm', 'rf'])
     parser.add_argument('-sc', '--scenario', choices=['1', '2', '3'])
     parser.add_argument('-k','--kfold', type=int, default=5)
     parser.add_argument('-e', '--export', choices=['1', '2', '3'])
     args = parser.parse_args()
+
+    # Require either -e or -m
+    if not args.export and not args.model:
+        parser.error("Either -e/--export or -m/--model is required")
 
     _internal_main(args)
 

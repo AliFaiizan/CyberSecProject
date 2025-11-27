@@ -24,83 +24,59 @@ def export_scenario_1(merged_df, X, y, scenario_fn, out_dir="exports/Scenario1")
         print(f"Saved: {train_file}  |  {test_file}")
 
 
-def export_scenario_2(merged_df, X, y, scenario_fn, attack_type, attack_intervals,
+def export_scenario_2(merged_df, X, y, scenario_fn,
                       out_dir="exports/Scenario2"):
     """
     Scenario 2:
         - Hold ONE attack type out of training
         - Train on normal + (n-1) attack types
         - Test on normal fold + ALL attack types
-    Creates folders:
-        Scenario2/HeldOut_AttackType_1/
-        Scenario2/HeldOut_AttackType_2/
-        ...
+    
+    Note: scenario_fn selects one random attack_id to hold out and uses it for all folds.
     """
 
     print("\n=== Exporting Scenario 2 Splits ===")
+    os.makedirs(out_dir, exist_ok=True)
 
-    attack_ids = attack_intervals["attack_id"].unique()
+    for fold_idx, held_out, train_idx, test_idx in scenario_fn(X, y):
 
-    for held_out in attack_ids:
+        train_set = merged_df.iloc[train_idx]
+        test_set  = merged_df.iloc[test_idx]
 
-        folder = f"{out_dir}/HeldOut_AttackType_{held_out}"
-        os.makedirs(folder, exist_ok=True)
+        train_file = f"{out_dir}/Train_Fold{fold_idx+1}.csv"
+        test_file  = f"{out_dir}/Test_Fold{fold_idx+1}.csv"
 
-        for fold_idx, attack_id, train_idx, test_idx in scenario_fn(
-            X, y, attack_type, attack_intervals
-        ):
-            if attack_id != held_out:
-                continue
+        train_set.to_csv(train_file, index=False)
+        test_set.to_csv(test_file, index=False)
 
-            train_set = merged_df.iloc[train_idx]
-            test_set  = merged_df.iloc[test_idx]
-
-            train_file = f"{folder}/Train_Fold{fold_idx+1}.csv"
-            test_file  = f"{folder}/Test_Fold{fold_idx+1}.csv"
-
-            train_set.to_csv(train_file, index=False)
-            test_set.to_csv(test_file, index=False)
-
-            print(f"[HeldOut={held_out}] Saved: {train_file} | {test_file}")
+        print(f"Fold {fold_idx+1} [HeldOut={held_out}] Saved: {train_file} | {test_file}")
 
 
-def export_scenario_3(merged_df, X, y,scenario_fn, attack_type, attack_intervals,
+def export_scenario_3(merged_df, X, y, scenario_fn,
                       out_dir="exports/Scenario3"):
     """
     Scenario 3:
         - Train on normal + EXACTLY ONE attack type
         - Test on normal fold + ALL attack types
-    Creates folders:
-        Scenario3/TrainOn_AttackType_1/
-        Scenario3/TrainOn_AttackType_2/
-        ...
+    
+    Note: scenario_fn selects one random attack_id to train on and uses it for all folds.
     """
 
     print("\n=== Exporting Scenario 3 Splits ===")
+    os.makedirs(out_dir, exist_ok=True)
 
-    attack_ids = attack_intervals["attack_id"].unique()
+    for fold_idx, selected_type, train_idx, test_idx in scenario_fn(X, y):
 
-    for selected in attack_ids:
+        train_set = merged_df.iloc[train_idx]
+        test_set  = merged_df.iloc[test_idx]
 
-        folder = f"{out_dir}/TrainOn_AttackType_{selected}"
-        os.makedirs(folder, exist_ok=True)
+        train_file = f"{out_dir}/Train_Fold{fold_idx+1}.csv"
+        test_file  = f"{out_dir}/Test_Fold{fold_idx+1}.csv"
 
-        for fold_idx, attack_id, train_idx, test_idx in scenario_fn(
-            X, y, attack_type, attack_intervals
-        ):
-            if attack_id != selected:
-                continue
+        train_set.to_csv(train_file, index=False)
+        test_set.to_csv(test_file, index=False)
 
-            train_set = merged_df.iloc[train_idx]
-            test_set  = merged_df.iloc[test_idx]
-
-            train_file = f"{folder}/Train_Fold{fold_idx+1}.csv"
-            test_file  = f"{folder}/Test_Fold{fold_idx+1}.csv"
-
-            train_set.to_csv(train_file, index=False)
-            test_set.to_csv(test_file, index=False)
-
-            print(f"[TrainOn={selected}] Saved: {train_file} | {test_file}")
+        print(f"Fold {fold_idx+1} [TrainOn={selected_type}] Saved: {train_file} | {test_file}")
 
 
 def export_model_output(merged_df, test_idx, y_pred, out_file):
