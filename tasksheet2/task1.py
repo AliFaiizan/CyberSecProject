@@ -92,7 +92,7 @@ def scenario_2_split(X, y, k=5, seed=42):
     
     attack_type, attack_intervals = extract_attack_types(y)
 
-    np.random.seed(seed)
+    np.random.seed(None)
 
     normal_idx = np.where(y == 0)[0]
     held_out = np.random.choice(attack_intervals["attack_id"].unique()) # randomly select one attack type to hold out
@@ -117,7 +117,7 @@ def scenario_3_split(X, y, k=5, seed=42):
       - Test on normal fold + all attack types
     """
     attack_type, attack_intervals = extract_attack_types(y)
-    np.random.seed(seed)
+    np.random.seed(None)
 
     normal_idx = np.where(y == 0)[0]
     attack_ids = attack_intervals["attack_id"].unique()
@@ -155,7 +155,7 @@ def _internal_main(args):
 
     # Load data as before...
     
-    haiEnd_df = load_and_clean_data(train_files, test_files, attack_cols=None) # merge train and test data # merge train and test data
+    haiEnd_df = load_and_clean_data(train_files, test_files) # merge train and test data # merge train and test data
 
     X = haiEnd_df.drop(columns=['Attack', 'timestamp'], errors='ignore') # label here refers to attack label 0 or 1
     y = haiEnd_df['Attack']

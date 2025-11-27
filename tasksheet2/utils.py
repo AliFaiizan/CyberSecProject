@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 
-def load_and_clean_data(train_files: List[str], test_files: List[str], attack_cols: List[str]=None, label_files: List[str]=None) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def load_and_clean_data(train_files: List[str], test_files: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     """
     Load & Clean Data
@@ -65,7 +65,7 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
     import itertools
     keys = list(param_grid.keys())
     values = list(param_grid.values())
-
+    print("Starting Parameter search...")
     for combo in itertools.product(*values):
         
         params = dict(zip(keys, combo))

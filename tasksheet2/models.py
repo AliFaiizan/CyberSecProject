@@ -10,17 +10,17 @@ from utils import optimal_param_search
 
 def run_OneClassSVM(X, y, k, scenario_fn):
 
-    # param_grid_ocsvm = {
-    # 'nu': [0.001], # 0.01, 0.05 
-    # 'gamma': ['scale'] # 0.1 0.01, 0.001 
-    # }
+    param_grid_ocsvm = {
+    'nu': [0.001], # 0.01, 0.05 
+    'gamma': ['scale'] # 0.1 0.01, 0.001 
+    }
 
-    # def build_ocsvm(params):
-    #     return OneClassSVM(kernel='rbf', **params)
-    # print("searching optimal parameters for One-Class SVM...")
-    # best_params_ocsvm, results_ocsvm = optimal_param_search(X, y, scenario_fn, build_ocsvm, param_grid_ocsvm) 
-    # print("Best parameters found for One-Class SVM:", best_params_ocsvm)
-    best_params_ocsvm = {'nu': 0.001, 'gamma': 'scale'}  # Pre-determined best params
+    def build_ocsvm(params):
+        return OneClassSVM(kernel='rbf', **params)
+
+    best_params_ocsvm, results_ocsvm = optimal_param_search(X, y, scenario_fn, build_ocsvm, param_grid_ocsvm) 
+    print("Best parameters found for One-Class SVM:", best_params_ocsvm)
+    #best_params_ocsvm = {'nu': 0.001, 'gamma': 'scale'}  # Pre-determined best params
     all_fold_predictions = []   # store for later if needed
     # nu: 0.001, gamma: scale
     pca = PCA(n_components=0.95)
@@ -50,17 +50,17 @@ def run_OneClassSVM(X, y, k, scenario_fn):
     return all_fold_predictions
 
 def run_EllipticEnvelope(X, y, k, scenario_fn):
-    # param_grid_ee = {
-    # 'contamination': [0.001, 0.01, 0.05],
-    # 'support_fraction': [None, 0.7, 0.9]
-    # }
+    param_grid_ee = {
+    'contamination': [0.001],# 0.01, 0.05
+    'support_fraction': [None]# 0.7, 0.9
+    }
 
-    # def build_elliptic(params):
-    #     return EllipticEnvelope(**params, random_state=42)
+    def build_elliptic(params):
+        return EllipticEnvelope(**params, random_state=42)
     
-    # best_params_ee, results_ee = optimal_param_search(X, y, scenario_fn, build_elliptic, param_grid_ee)
-
-    best_params_ee = {'contamination': 0.001, 'support_fraction': None}  # Pre-determined best params
+    best_params_ee, results_ee = optimal_param_search(X, y, scenario_fn, build_elliptic, param_grid_ee)
+    print("Best parameters found for EllipticEnvelope:", best_params_ee)
+    #best_params_ee = {'contamination': 0.001, 'support_fraction': None}  # Pre-determined best params
     all_fold_predictions = []
 
     pca = PCA(n_components=0.95)  # Keep 95% of variance
@@ -93,17 +93,17 @@ def run_EllipticEnvelope(X, y, k, scenario_fn):
     return all_fold_predictions
 
 def run_LOF(X, y, k, scenario_fn):
-    # param_grid_lof = {
-    # 'n_neighbors': [10, 20, 30, 50],
-    # 'metric': ['euclidean', 'manhattan']
-    # }
+    param_grid_lof = {
+    'n_neighbors': [10],#, 20, 30, 50
+    'metric': ['euclidean'] # 'manhattan'
+    }
 
-    # def build_lof(params):
-    #     return LocalOutlierFactor( novelty=True,**params)
+    def build_lof(params):
+        return LocalOutlierFactor( novelty=True,**params)
     
-    # best_params_lof, results_lof = optimal_param_search(X, y, scenario_fn, build_lof, param_grid_lof)
-
-    best_params_lof = {'n_neighbors': 20, 'metric': 'euclidean'}  # Pre-determined best params
+    best_params_lof, results_lof = optimal_param_search(X, y, scenario_fn, build_lof, param_grid_lof)
+    print("Best parameters found for LOF:", best_params_lof)
+    #best_params_lof = {'n_neighbors': 20, 'metric': 'euclidean'}  # Pre-determined best params
     all_fold_predictions = []
 
     pca = PCA(n_components=0.95)
@@ -140,14 +140,14 @@ def run_LOF(X, y, k, scenario_fn):
 
 def run_binary_svm(X, y, k, scenario_fn):
      
-    # param_grid_binary_svm = {
-    # 'C': [0.1, 1, 10],
-    # 'gamma': ['scale', 0.01, 0.001]
-    # }
-    # def build_binary_svm(C=1.0, gamma='scale', kernel='rbf'):
-    #     return SVC(C=C, gamma=gamma, kernel=kernel)
-    # best_params_svm, results_svm = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y,attack_type,attack_intervals), build_binary_svm, param_grid_binary_svm)
-    best_params_svm = {'C': 10.0, 'gamma': 'scale', 'class_weight': 'balanced'}  # Pre-determined best params
+    param_grid_binary_svm = {
+    'C': [10],#0.1, 1, 
+    'gamma': ['scale'], # 0.01, 0.001
+    }
+    def build_binary_svm(C=1.0, gamma='scale', kernel='rbf'):
+        return SVC(C=C, gamma=gamma, kernel=kernel)
+    best_params_svm, results_svm = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_binary_svm, param_grid_binary_svm)
+    #best_params_svm = {'C': 10.0, 'gamma': 'scale', 'class_weight': 'balanced'}  # Pre-determined best params
     svm_predictions = []
     pca = PCA(n_components=0.95)
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
@@ -174,21 +174,21 @@ def run_binary_svm(X, y, k, scenario_fn):
 
 def run_knn(X, y, k,scenario_fn):
 
-    # def build_knn(params):
-    #     return KNeighborsClassifier(
-    #     n_neighbors=params['n_neighbors'],
-    #     weights=params['weights'],
-    #     metric=params['metric']
-    #     )
+    def build_knn(params):
+        return KNeighborsClassifier(
+        n_neighbors=params['n_neighbors'],
+        weights=params['weights'],
+        metric=params['metric']
+        )
 
-    # param_grid_knn = {
-    # 'n_neighbors': [3, 5, 7, 11],       # odd numbers → avoid ties
-    # 'weights': ['uniform', 'distance'], # common choices
-    # 'metric': ['euclidean', 'manhattan'] # standard distances
-    # }
-    # best_params_knn, results_knn = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y,attack_type,attack_intervals), build_knn, param_grid_knn)
-
-    best_params_knn = {'n_neighbors': 3, 'weights': 'uniform', 'metric': 'euclidean'}
+    param_grid_knn = {
+    'n_neighbors': [3],  #, 5, 7, 11  
+    'weights': ['uniform'], # 'distance'
+    'metric': ['euclidean'] #  'manhattan'
+    }
+    best_params_knn, results_knn = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_knn, param_grid_knn)
+    print("Best parameters found for kNN:", best_params_knn)
+    #best_params_knn = {'n_neighbors': 3, 'weights': 'uniform', 'metric': 'euclidean'}
     all_predictions = []
     pca = PCA(n_components=0.95)
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
@@ -214,23 +214,23 @@ def run_knn(X, y, k,scenario_fn):
 
 def run_random_forest(X, y, k, scenario_fn):
 
-    # def build_rf(params):
-    #     return RandomForestClassifier(
-    #     n_estimators=params['n_estimators'],
-    #     max_depth=params['max_depth'],
-    #     min_samples_split=params['min_samples_split'],
-    #     random_state=42,
-    #     n_jobs=-1     # use all cores
-    #     )
+    def build_rf(params):
+        return RandomForestClassifier(
+        n_estimators=params['n_estimators'],
+        max_depth=params['max_depth'],
+        min_samples_split=params['min_samples_split'],
+        random_state=42,
+        n_jobs=-1     # use all cores
+        )
 
-    # param_grid_rf = {
-    # 'n_estimators': [50, 100, 200],
-    # 'max_depth': [5, 10, None],
-    # 'min_samples_split': [2, 5]
-    # }
-    # best_params_rf, results_rf = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_rf, param_grid_rf)
-
-    best_params_rf = {'n_estimators': 50, 'max_depth': 5, 'min_samples_split': 5}
+    param_grid_rf = {
+    'n_estimators': [50],#, 100, 200
+    'max_depth': [5],#, 10, None
+    'min_samples_split': [5] #2,
+    }
+    best_params_rf, results_rf = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_rf, param_grid_rf)
+    print("Best parameters found for Random Forest:", best_params_rf)
+    #best_params_rf = {'n_estimators': 50, 'max_depth': 5, 'min_samples_split': 5}
     all_predictions = []
     pca = PCA(n_components=0.95)
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
