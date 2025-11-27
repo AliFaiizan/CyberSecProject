@@ -139,7 +139,6 @@ def main():
     merged = load_and_clean_data(
         ["../datasets/hai-22.04/train1.csv"],
         ["../datasets/hai-22.04/test1.csv"],
-        attack_cols=None,
     )
 
     # Features: drop Attack + timestamp

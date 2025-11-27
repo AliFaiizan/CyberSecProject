@@ -141,13 +141,13 @@ def run_LOF(X, y, k, scenario_fn):
 def run_binary_svm(X, y, k, scenario_fn):
      
     param_grid_binary_svm = {
-    'C': [10],#0.1, 1, 
+    'C': [10.0],#0.1, 1, 
     'gamma': ['scale'], # 0.01, 0.001
     }
-    def build_binary_svm(C=1.0, gamma='scale', kernel='rbf'):
-        return SVC(C=C, gamma=gamma, kernel=kernel)
-    best_params_svm, results_svm = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_binary_svm, param_grid_binary_svm)
-    #best_params_svm = {'C': 10.0, 'gamma': 'scale', 'class_weight': 'balanced'}  # Pre-determined best params
+    def build_binary_svm(params):
+        return SVC(C=params['C'], gamma=params['gamma'], kernel='rbf')
+    # best_params_svm, results_svm = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_binary_svm, param_grid_binary_svm)
+    best_params_svm = {'C': 10.0, 'gamma': 'scale'}  # Pre-determined best params
     svm_predictions = []
     pca = PCA(n_components=0.95)
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
