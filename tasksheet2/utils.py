@@ -102,7 +102,7 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
     print("\nBEST PARAMS:", best_params, "Score:", best_score)
     return best_params, results
 
-def get_balanced_attack_indices(attack_type):
+def get_balanced_attack_indices(attack_type, exclude_type=None):
     """
     Returns a balanced set of attack sample indices.
     Each attack type contributes the same number of samples.
@@ -116,6 +116,10 @@ def get_balanced_attack_indices(attack_type):
 
     # attack type = 0 is normals --> get unique attack types [1,2,3,...]
     attack_types = np.unique(attack_type[attack_type != 0])
+
+    # Optionally remove one attack type (Scenario 2)
+    if exclude_type is not None:
+        attack_types = attack_types[attack_types != exclude_type]
 
     attack_by_type = {
         a: np.where(attack_type == a)[0] for a in attack_types # find all indices where attack_type equals a

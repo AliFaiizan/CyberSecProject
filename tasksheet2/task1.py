@@ -95,30 +95,15 @@ def scenario_2_split(X, y, k=5, seed=42):
     np.random.seed(seed)
 
     normal_idx = np.where(y == 0)[0]
-    attack_types = np.unique(attack_type[attack_type != 0]) #[1,2,3,4,5]
-    # --- Group indices per attack type ---
-    attack_by_type = {
-        a: np.where(attack_type == a)[0]
-        for a in attack_types
-    }
-    # --- Balance test attack samples ---
-    min_count = min(len(idx_list) for idx_list in attack_by_type.values())
-    balanced_test_attack_idx = []
-    for a, idx_list in attack_by_type.items():
-        chosen = np.random.choice(idx_list, min_count, replace=False)
-        balanced_test_attack_idx.append(chosen)
+    held_out = np.random.choice(attack_intervals["attack_id"].unique()) # randomly select one attack type to hold out
+    train_attack_idx = get_balanced_attack_indices(attack_type, exclude_type=held_out)
+    test_attack_idx = get_balanced_attack_indices(attack_type, exclude_type=None)
 
-    balanced_test_attack_idx = np.concatenate(balanced_test_attack_idx)
-
-    held_out = np.random.choice(attack_ids) # For simplicity, hold out the first attack type
     folds = make_kfold_indices(len(normal_idx), k=k, seed=seed)
 
     for fold_idx in range(k):
         test_normal_idx = normal_idx[folds[fold_idx]]
         train_normal_idx = np.setdiff1d(normal_idx, test_normal_idx)
-
-        train_attack_idx = np.where((attack_type != 0) & (attack_type != held_out))[0]
-        test_attack_idx = np.where(attack_type != 0)[0]
 
         train_idx = np.concatenate([train_normal_idx, train_attack_idx])
         test_idx = np.concatenate([test_normal_idx, test_attack_idx])
