@@ -73,18 +73,18 @@ class DenseEncoder(nn.Module):
             layers.append(nn.Linear(prev, h))
             layers.append(act_layer)
             prev = h
-        self.backbone = nn.Sequential(*layers)
+        self.backbone = nn.Sequential(*layers) # this is stack of fully connected layers with activations, through which the input is passes in sequence
 
-        self.fc_mu = nn.Linear(prev, latent_dim)
-        self.fc_logvar = nn.Linear(prev, latent_dim)
+        self.fc_mu = nn.Linear(prev, latent_dim) #A linear layer that outputs the mean (mu) of the latent distribution for each input sample.
+        self.fc_logvar = nn.Linear(prev, latent_dim) # A linear layer that outputs the log-variance (logvar) of the latent distribution for each input sample.
 
     def forward(self, x):
         """
         x: [batch, input_dim]
         """
-        h = self.backbone(x)
-        mu = self.fc_mu(h)
-        logvar = self.fc_logvar(h)
+        h = self.backbone(x) # h is final hidden representation after passing through all hidden layers
+        mu = self.fc_mu(h) # h passed through fc_mu layer to get mean of latent distribution
+        logvar = self.fc_logvar(h) # h passed through fc_logvar layer to get log-variance of latent distribution
         return mu, logvar
 
 
@@ -675,161 +675,138 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, default="reconstruction",
                         choices=["reconstruction", "classification"],
-                        help="Which decoder to train.")
+                        help="Which decoder to train (Task 1).")
     parser.add_argument("--layer-type", type=str, default="dense",
-                        choices=["dense", "conv1d", "lstm"],
-                        help="Encoder/decoder type.")
+                        choices=["dense", "conv1d", "lstm"])
     parser.add_argument("--activation", type=str, default="relu",
-                        choices=["relu", "tanh", "leaky_relu"],
-                        help="Activation function.")
-    parser.add_argument("--latent-dim", type=int, default=8,
-                        help="Latent dimension.")
-    parser.add_argument("--num-classes", type=int, default=2,
-                        help="For classification decoder.")
+                        choices=["relu", "tanh", "leaky_relu"])
+    parser.add_argument("--latent-dim", type=int, default=8)
+    parser.add_argument("--num-classes", type=int, default=2)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--out-dir", type=str, default="vae_features")
-    parser.add_argument("--hp-search", action="store_true",
-                        help="Hyperparameter search (reconstruction mode only).")
+    parser.add_argument("--hp-search", action="store_true")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    ensure_dir(args.out_dir)
+    ensure_dir(args.out_dir) 
 
     # --------------------------------------------------------------
-    # LOAD REAL DATA
+    # LOAD REAL DATA (same for Task 1 and Task 2)
     # --------------------------------------------------------------
     train_files = sorted(glob("../datasets/hai-22.04/train*.csv"))
     test_files  = sorted(glob("../datasets/hai-22.04/test*.csv"))
 
-    X, y = load_data(train_files, test_files)   # X = readings, y = attack labels
-    print(f"[INFO] Loaded dataset: {X.shape}")
+    X, y = load_data(train_files, test_files)   # X: readings, y: attack labels
+
+    input_dim = X.shape[1]
+    print(f"[INFO] Loaded dataset with {X.shape[0]} samples and {input_dim} features.")
 
     # --------------------------------------------------------------
-    # SCENARIO SPLIT (example: Scenario 2)
-    # scenario_2_split RETURNS: (fold_idx, held_out_type, train_idx, test_idx)
+    # TASK 1 SPLIT — NO SCENARIOS
     # --------------------------------------------------------------
-    from scenarios import scenario_2_split
 
-    for fold_idx, held_out, train_idx, test_idx in scenario_2_split(X, y):
-        print(f"\n=== Scenario 2 | Fold {fold_idx} | Held-out attack type: {held_out} ===")
+    from sklearn.model_selection import train_test_split
 
-        # Full train set (from scenario)
-        X_train_full = X[train_idx]
-        y_train_full = y[train_idx]
+    if args.mode == "reconstruction":
+        # Train VAE on NORMAL data only
+        X_normal = X[y == 0]
+        X_train, X_val = train_test_split(
+            X_normal, test_size=0.2, random_state=42, shuffle=True
+        )
+        y_train = y_val = None
 
-        # Validation split (20%) — REQUIRED for VAE
-        from sklearn.model_selection import train_test_split
-        X_train, X_val, y_train, y_val = train_test_split(X_train_full, y_train_full, test_size=0.2,random_state=42,shuffle=True)
+    else:  # classification decoder
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, test_size=0.2, random_state=42, shuffle=True
+        )
 
-        # Test set (from scenario)
-        X_test = X[test_idx]
-        y_test = y[test_idx]
-
-        # Feature dimension
-        input_dim = X.shape[1]
-
-        # --------------------------------------------------------------
-        # HYPERPARAMETER SEARCH (optional)
-        # --------------------------------------------------------------
-        if args.hp_search and args.mode == "reconstruction":
-            best_cfg = hyperparameter_search_vae_recon(
-                X_train=X_train,
-                X_val=X_val,
-                input_dim=input_dim,
-                layer_types=["dense", "conv1d", "lstm"],
-                activations=["relu", "tanh", "leaky_relu"],
-                latent_dims=[4, 8, 16],
-                epochs=max(3, args.epochs // 2),
-                batch_size=args.batch_size,
-                device=device,
-            )
-
-            args.layer_type = best_cfg["layer_type"]
-            args.activation = best_cfg["activation"]
-            args.latent_dim = best_cfg["latent_dim"]
-
-        # --------------------------------------------------------------
-        # BUILD FINAL VAE MODEL
-        # --------------------------------------------------------------
-        model = VAE(
+    # --------------------------------------------------------------
+    # OPTIONAL: HYPERPARAMETER SEARCH
+    # --------------------------------------------------------------
+    if args.hp_search and args.mode == "reconstruction":
+        best_cfg = hyperparameter_search_vae_recon(
+            X_train=X_train,
+            X_val=X_val,
             input_dim=input_dim,
-            latent_dim=args.latent_dim,
-            layer_type=args.layer_type,
-            activation=args.activation,
-            num_classes=None if args.mode == "reconstruction" else args.num_classes
+            layer_types=["dense", "conv1d", "lstm"],
+            activations=["relu", "tanh", "leaky_relu"],
+            latent_dims=[4, 8, 16],
+            epochs=max(3, args.epochs // 2),
+            batch_size=args.batch_size,
+            device=device,
+        )
+        args.layer_type = best_cfg["layer_type"]
+        args.activation = best_cfg["activation"]
+        args.latent_dim = best_cfg["latent_dim"]
+
+    # --------------------------------------------------------------
+    # BUILD MODEL
+    # --------------------------------------------------------------
+    model = VAE(
+        input_dim=input_dim,
+        latent_dim=args.latent_dim,
+        layer_type=args.layer_type,
+        activation=args.activation,
+        num_classes=None if args.mode == "reconstruction" else args.num_classes
+    )
+
+    # Data loaders
+    if args.mode == "reconstruction":
+        train_loader = DataLoader(
+            TensorDataset(torch.from_numpy(X_train).float()),
+            batch_size=args.batch_size,
+            shuffle=True,
+        )
+        val_loader = DataLoader(
+            TensorDataset(torch.from_numpy(X_val).float()),
+            batch_size=args.batch_size,
+            shuffle=False,
+        )
+    else:
+        train_loader = DataLoader(
+            TensorDataset(
+                torch.from_numpy(X_train).float(),
+                torch.from_numpy(y_train).long()
+            ),
+            batch_size=args.batch_size,
+            shuffle=True,
+        )
+        val_loader = DataLoader(
+            TensorDataset(
+                torch.from_numpy(X_val).float(),
+                torch.from_numpy(y_val).long()
+            ),
+            batch_size=args.batch_size,
+            shuffle=False,
         )
 
-        # DataLoaders
-        if args.mode == "reconstruction":
-            train_loader = DataLoader(
-                TensorDataset(torch.from_numpy(X_train).float()),
-                batch_size=args.batch_size,
-                shuffle=True,
-            )
-            val_loader = DataLoader(
-                TensorDataset(torch.from_numpy(X_val).float()),
-                batch_size=args.batch_size,
-                shuffle=False,
-            )
-        else:
-            train_loader = DataLoader(
-                TensorDataset(
-                    torch.from_numpy(X_train).float(),
-                    torch.from_numpy(y_train).long()
-                ),
-                batch_size=args.batch_size,
-                shuffle=True,
-            )
-            val_loader = DataLoader(
-                TensorDataset(
-                    torch.from_numpy(X_val).float(),
-                    torch.from_numpy(y_val).long()
-                ),
-                batch_size=args.batch_size,
-                shuffle=False,
-            )
-
-        # --------------------------------------------------------------
-        # TRAIN VAE (based on mode)
-        # --------------------------------------------------------------
-        if args.mode == "reconstruction":
-            train_vae_reconstruction(
-                model, train_loader, val_loader,
-                device=device,
-                epochs=args.epochs,
-                lr=1e-3,
-            )
-        else:
-            train_vae_classification(
-                model, train_loader, val_loader,
-                device=device,
-                epochs=args.epochs,
-                lr=1e-3,
-            )
-
-        # --------------------------------------------------------------
-        # EXTRACT LATENT FEATURES
-        # --------------------------------------------------------------
-        Z_train = extract_latent_features(model, X_train, device=device)
-        Z_val   = extract_latent_features(model, X_val, device=device)
-        Z_test  = extract_latent_features(model, X_test, device=device)
-
-        # --------------------------------------------------------------
-        # SAVE LATENT FEATURE FILES
-        # --------------------------------------------------------------
-        base_name = (
-            f"scenario2_fold{fold_idx}_"
-            f"{args.layer_type}_{args.activation}_ld{args.latent_dim}_"
-            f"{args.mode}"
+    # --------------------------------------------------------------
+    # TRAIN THE VAE
+    # --------------------------------------------------------------
+    if args.mode == "reconstruction":
+        train_vae_reconstruction(
+            model, train_loader, val_loader,
+            device=device, epochs=args.epochs
+        )
+    else:
+        train_vae_classification(
+            model, train_loader, val_loader,
+            device=device, epochs=args.epochs
         )
 
-        np.save(f"{args.out_dir}/{base_name}_train.npy", Z_train)
-        np.save(f"{args.out_dir}/{base_name}_val.npy", Z_val)
-        np.save(f"{args.out_dir}/{base_name}_test.npy", Z_test)
+    # --------------------------------------------------------------
+    # EXTRACT FEATURES FOR THE FULL DATASET
+    # --------------------------------------------------------------
+    Z_full = extract_latent_features(model, X, device=device)
 
-        print(f"[INFO] Latent features saved to: {args.out_dir}/{base_name}_*.npy")
+    # --------------------------------------------------------------
+    # SAVE FEATURES (Task 1 output)
+    # --------------------------------------------------------------
+    base_name = f"task1_{args.layer_type}_{args.activation}_ld{args.latent_dim}_{args.mode}"
+    np.save(f"{args.out_dir}/{base_name}.npy", Z_full)
 
+    print(f"[INFO] Saved Task 1 features to {args.out_dir}/{base_name}.npy")
 
 if __name__ == "__main__":
     main()

@@ -123,38 +123,62 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
     print("\nBEST PARAMS:", best_params, "Score:", best_score)
     return best_params, results
 
-def get_balanced_attack_indices(attack_type, exclude_type=None):
+def get_balanced_attack_indices(attack_type, held_out=None, train_ratio=0.8, seed=42):
     """
-    Returns a balanced set of attack sample indices.
-    Each attack type contributes the same number of samples.
+    Balanced, disjoint attack sample split for Scenario 2.
 
-    attack_type: array-like of shape (n_samples,)
-        attack_type[i] = 0 (normal) or attack_typeID (1,2,3,...)
+    Parameters
+    ----------
+    attack_type : array-like
+        attack_type[i] = 0 (normal) or attack-type ID.
+    held_out : int or None
+        Attack type to EXCLUDE from training (Scenario 2).
+    train_ratio : float
+        Percentage of samples per attack type to use for training.
+    seed : int
+        Random seed for reproducibility.
 
-    Returns:
-        balanced_attack_idx: np.array of indices
+    Returns
+    -------
+    train_attack_idx : np.ndarray
+        Balanced, disjoint indices for training (n-1 attack types).
+    test_attack_idx : np.ndarray
+        Balanced, disjoint indices for testing (all attack types).
     """
 
-    # attack type = 0 is normals --> get unique attack types [1,2,3,...]
+    import numpy as np
+    np.random.seed(seed)
+
+    # All attack types in dataset (ignore 0)
     attack_types = np.unique(attack_type[attack_type != 0])
 
-    # Optionally remove one attack type (Scenario 2)
-    if exclude_type is not None:
-        attack_types = attack_types[attack_types != exclude_type]
+    # smallest available per attack type
+    min_count = min(len(np.where(attack_type == a)[0]) for a in attack_types)
 
-    attack_by_type = {
-        a: np.where(attack_type == a)[0] for a in attack_types # find all indices where attack_type equals a
-    }
+    # train/test counts per attack type
+    train_count = int(min_count * train_ratio)
+    test_count  = min_count - train_count
 
-    # find the smallest number of samples among all attack types
-    min_count = min(len(idx_list) for idx_list in attack_by_type.values())
+    train_indices = []
+    test_indices = []
 
-    balanced_list = []
-    for a, idx_list in attack_by_type.items(): # idx_list contains all indices for attack type a
-        chosen = np.random.choice(idx_list, min_count, replace=False) # randomly select min_count samples from each attack type without replacement
-        balanced_list.append(chosen)
+    for a in attack_types:
+        idx_list = np.where(attack_type == a)[0]
+        np.random.shuffle(idx_list)
 
-    # 5. Combine into a single array
-    balanced_attack_idx = np.concatenate(balanced_list)
+        # Split evenly
+        train_part = idx_list[:train_count]
+        test_part  = idx_list[train_count:train_count + test_count]
 
-    return balanced_attack_idx
+        # If this is the held-out type, exclude from training
+        if held_out is not None and a == held_out:
+            test_indices.append(test_part)      # Only test samples
+        else:
+            train_indices.append(train_part)
+            test_indices.append(test_part)
+
+    # Combine for output
+    train_attack_idx = np.concatenate(train_indices) if train_indices else np.array([], dtype=int)
+    test_attack_idx  = np.concatenate(test_indices)
+
+    return train_attack_idx, test_attack_idx
