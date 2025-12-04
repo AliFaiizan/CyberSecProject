@@ -694,11 +694,14 @@ def main():
     # --------------------------------------------------------------
     # LOAD REAL DATA (same for Task 1 and Task 2)
     # --------------------------------------------------------------
-    train_files = sorted(glob("../datasets/hai-22.04/train*.csv"))
-    test_files  = sorted(glob("../datasets/hai-22.04/test*.csv"))
+    train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
+    test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
 
     X, y = load_data(train_files, test_files)   # X: readings, y: attack labels
+    from sklearn.preprocessing import StandardScaler
 
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
     input_dim = X.shape[1]
     print(f"[INFO] Loaded dataset with {X.shape[0]} samples and {input_dim} features.")
 
@@ -724,21 +727,21 @@ def main():
     # --------------------------------------------------------------
     # OPTIONAL: HYPERPARAMETER SEARCH
     # --------------------------------------------------------------
-    if args.hp_search and args.mode == "reconstruction":
-        best_cfg = hyperparameter_search_vae_recon(
-            X_train=X_train,
-            X_val=X_val,
-            input_dim=input_dim,
-            layer_types=["dense", "conv1d", "lstm"],
-            activations=["relu", "tanh", "leaky_relu"],
-            latent_dims=[4, 8, 16],
-            epochs=max(3, args.epochs // 2),
-            batch_size=args.batch_size,
-            device=device,
-        )
-        args.layer_type = best_cfg["layer_type"]
-        args.activation = best_cfg["activation"]
-        args.latent_dim = best_cfg["latent_dim"]
+    # if args.hp_search and args.mode == "reconstruction":
+    #     best_cfg = hyperparameter_search_vae_recon(
+    #         X_train=X_train,
+    #         X_val=X_val,
+    #         input_dim=input_dim,
+    #         layer_types=["dense", "conv1d", "lstm"],
+    #         activations=["relu", "tanh", "leaky_relu"],
+    #         latent_dims=[4, 8, 16],
+    #         epochs=max(3, args.epochs // 2),
+    #         batch_size=args.batch_size,
+    #         device=device,
+    #     )
+    #     args.layer_type = best_cfg["layer_type"]
+    #     args.activation = best_cfg["activation"]
+    #     args.latent_dim = best_cfg["latent_dim"]
 
     # --------------------------------------------------------------
     # BUILD MODEL
