@@ -420,7 +420,7 @@ class VAE(nn.Module):
 
     def forward(self, x, mode: str = "reconstruction"):
         mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar)
+        z = self.reparameterize(mu, logvar) # z is sampled latent vector
 
         if mode == "reconstruction":
             x_rec = self.decode_recon(z)
@@ -490,11 +490,11 @@ def train_vae_reconstruction(
     history = {"train_loss": [], "val_loss": []}
 
     for epoch in range(1, epochs + 1):
-        model.train()
+        model.train() # switch model to training mode effecting certain layers like dropout, batchnorm etc.
         total_train = 0.0
         for (x_batch,) in train_loader:
-            x_batch = x_batch.to(device)
-            optimizer.zero_grad()
+            x_batch = x_batch.to(device) # move input batch to specified device (CPU/GPU)
+            optimizer.zero_grad() # reset gradients of model parameters to zero before backpropagation
             x_rec, mu, logvar = model(x_batch, mode="reconstruction")
             loss = vae_loss_reconstruction(x_batch, x_rec, mu, logvar, recon_type)
             loss.backward()
@@ -593,11 +593,19 @@ def extract_latent_features(
             x_batch = x_batch.to(device)
             mu, logvar = model.encode(x_batch)
             z = model.reparameterize(mu, logvar)
+            print(z.shape)
             zs.append(z.cpu().numpy())
     Z = np.concatenate(zs, axis=0)
     return Z
 
-
+def reconstruct_physical_readings(model, X, device="cuda"):
+    model.eval()
+    X_tensor = torch.from_numpy(X).float().to(device)
+    with torch.no_grad():
+        mu, logvar = model.encode(X_tensor)
+        z = model.reparameterize(mu, logvar)
+        X_hat = model.decode(z)
+    return X_hat.cpu().numpy()
 # ---------------------------------------------------------------------
 # Simple hyperparameter search for Task 1(c)
 # ---------------------------------------------------------------------
@@ -694,15 +702,15 @@ def main():
     # --------------------------------------------------------------
     # LOAD REAL DATA (same for Task 1 and Task 2)
     # --------------------------------------------------------------
-    train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
-    test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
+    train_files = sorted(glob("../datasets/hai-22.04/train*.csv"))
+    test_files  = sorted(glob("../datasets/hai-22.04/test*.csv"))
 
     X, y = load_data(train_files, test_files)   # X: readings, y: attack labels
     from sklearn.preprocessing import StandardScaler
 
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
-    input_dim = X.shape[1]
+    input_dim = X.shape[1] # number of features
     print(f"[INFO] Loaded dataset with {X.shape[0]} samples and {input_dim} features.")
 
     # --------------------------------------------------------------
