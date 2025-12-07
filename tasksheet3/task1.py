@@ -702,8 +702,8 @@ def main():
     # --------------------------------------------------------------
     # LOAD REAL DATA (same for Task 1 and Task 2)
     # --------------------------------------------------------------
-    train_files = sorted(glob("../datasets/hai-22.04/train*.csv"))
-    test_files  = sorted(glob("../datasets/hai-22.04/test*.csv"))
+    train_files = sorted(glob("../../datasets/hai-22.04/train1.csv"))
+    test_files  = sorted(glob("../../datasets/hai-22.04/test1.csv"))
 
     X, y = load_data(train_files, test_files)   # X: readings, y: attack labels
     from sklearn.preprocessing import StandardScaler
