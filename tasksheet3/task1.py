@@ -851,7 +851,7 @@ def main():
     # --------------------------------------------------------------
     # EXTRACT FEATURES FOR THE FULL DATASET
     # --------------------------------------------------------------
-    Z_full = extract_latent_features(model, X, device=device)
+    Z_full, runtime, cpu_mem_used, gpu_mem_used = extract_latent_features(model, X, device=device)
 
     # --------------------------------------------------------------
     # SAVE FEATURES (Task 1 output)
