@@ -1,5 +1,7 @@
 # task2_cnn_latent.py
 import os
+import time
+import psutil
 import numpy as np
 import pandas as pd
 
@@ -11,6 +13,10 @@ from tensorflow.keras.layers import (
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import to_categorical
+
+
+process = psutil.Process()
+
 
 # ------------------------------------------------------------
 # Create sliding windows on latent features
@@ -61,9 +67,9 @@ def build_cnn_6blocks(input_shape, lr=1e-3, dropout_rate=0.3):
 
 
 # ------------------------------------------------------------
-# Run CNN for each fold of scenario 2 or 3
+# Run CNN for each fold
 # ------------------------------------------------------------
-def run_cnn_latent(Z, y, scenario_fn, k, out_dir, M=20, epochs=10):
+def run_cnn_latent(Z, y, scenario_fn, k, out_dir, M=20, epochs=5):
     os.makedirs(out_dir, exist_ok=True)
 
     print(f"[CNN] latent_dim={Z.shape[1]}, window_size M={M}")
@@ -82,6 +88,7 @@ def run_cnn_latent(Z, y, scenario_fn, k, out_dir, M=20, epochs=10):
         Z_train, y_train = Z[train_idx], y[train_idx]
         Z_test, y_test = Z[test_idx], y[test_idx]
 
+        # Create windowed data
         X_train_w, y_train_w = create_windows(Z_train, y_train, M, stride=1)
         X_test_w, y_test_w = create_windows(Z_test, y_test, M, stride=1)
 
@@ -95,9 +102,15 @@ def run_cnn_latent(Z, y, scenario_fn, k, out_dir, M=20, epochs=10):
 
         input_shape = (M, Z.shape[1])
         model = build_cnn_6blocks(input_shape)
-
         cb = EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True)
 
+        # -------------------------------------------------------
+        # Measure runtime + memory BEFORE training
+        # -------------------------------------------------------
+        mem0 = process.memory_info().rss
+        t0 = time.time()
+
+        # Train CNN
         model.fit(
             X_train_w, y_train_cat,
             validation_data=(X_test_w, y_test_cat),
@@ -107,6 +120,18 @@ def run_cnn_latent(Z, y, scenario_fn, k, out_dir, M=20, epochs=10):
             verbose=1
         )
 
+        # -------------------------------------------------------
+        # Measure runtime + memory AFTER training
+        # -------------------------------------------------------
+        t1 = time.time()
+        mem1 = process.memory_info().rss
+
+        runtime_sec = t1 - t0
+        mem_used_bytes = mem1 - mem0
+
+        print(f"[CNN] Runtime: {runtime_sec:.2f} sec | Memory Used: {mem_used_bytes/1e6:.2f} MB")
+
+        # Predict
         preds = np.argmax(model.predict(X_test_w, verbose=0), axis=1)
 
         # Save predictions
@@ -125,11 +150,13 @@ def run_cnn_latent(Z, y, scenario_fn, k, out_dir, M=20, epochs=10):
 
         metrics.append({
             "fold": fold_idx + 1,
+            "attack_id": attack_id,
             "precision": precision,
             "recall": recall,
-            "attack_id": attack_id
+            "runtime_sec": runtime_sec,
+            "memory_bytes": mem_used_bytes
         })
 
+    # Save overall metrics
     pd.DataFrame(metrics).to_csv(f"{out_dir}/metrics_summary.csv", index=False)
     print("[CNN] Completed all folds")
-
