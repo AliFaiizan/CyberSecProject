@@ -581,7 +581,23 @@ def extract_latent_features(
     X: np.ndarray,
     device: str,
     batch_size: int = 1024
-) -> np.ndarray:
+):
+    import psutil
+    import time
+    # -------------------------
+    # Measure memory & time
+    # -------------------------
+    process = psutil.Process()
+    cpu_mem_before = process.memory_info().rss / 1024**2   # MB
+
+    if device == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+
+    start_time = time.time()
+
+    # -------------------------
+    # Standard feature extraction
+    # -------------------------
     model.to(device)
     model.eval()
     X_tensor = torch.from_numpy(X).float()
@@ -593,10 +609,36 @@ def extract_latent_features(
             x_batch = x_batch.to(device)
             mu, logvar = model.encode(x_batch)
             z = model.reparameterize(mu, logvar)
-            print(z.shape)
+
+            # For debugging:
+            # print("latent batch shape:", z.shape)
+
             zs.append(z.cpu().numpy())
+
     Z = np.concatenate(zs, axis=0)
-    return Z
+
+    # -------------------------
+    # Time & memory after extraction
+    # -------------------------
+    end_time = time.time()
+    cpu_mem_after = process.memory_info().rss / 1024**2
+
+    runtime = end_time - start_time
+    cpu_mem_used = cpu_mem_after - cpu_mem_before
+
+    # GPU memory
+    gpu_mem_used = None
+    if device == "cuda":
+        gpu_mem_used = torch.cuda.max_memory_allocated() / 1024**2
+
+    print("\n===== FEATURE EXTRACTION METRICS =====")
+    print(f"Runtime: {runtime:.4f} seconds")
+    print(f"CPU memory used: {cpu_mem_used:.2f} MB")
+    if gpu_mem_used is not None:
+        print(f"GPU memory used: {gpu_mem_used:.2f} MB")
+    print("======================================\n")
+
+    return Z, runtime, cpu_mem_used, gpu_mem_used
 
 def reconstruct_physical_readings(model, X, device="cuda"):
     model.eval()
@@ -702,8 +744,8 @@ def main():
     # --------------------------------------------------------------
     # LOAD REAL DATA (same for Task 1 and Task 2)
     # --------------------------------------------------------------
-    train_files = sorted(glob("../../datasets/hai-22.04/train1.csv"))
-    test_files  = sorted(glob("../../datasets/hai-22.04/test1.csv"))
+    train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
+    test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
 
     X, y = load_data(train_files, test_files)   # X: readings, y: attack labels
     from sklearn.preprocessing import StandardScaler
@@ -809,7 +851,7 @@ def main():
     # --------------------------------------------------------------
     # EXTRACT FEATURES FOR THE FULL DATASET
     # --------------------------------------------------------------
-    Z_full = extract_latent_features(model, X, device=device)
+    Z_full, runtime, cpu_mem_used, gpu_mem_used = extract_latent_features(model, X, device=device)
 
     # --------------------------------------------------------------
     # SAVE FEATURES (Task 1 output)

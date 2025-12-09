@@ -9,3 +9,4 @@ __pycache__/
 *.zip
 datasets/*
 tasksheet2/exports/
+tasksheet3/exports/
