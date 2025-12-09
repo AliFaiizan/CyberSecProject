@@ -1,191 +1,185 @@
 #!/usr/bin/env python3
 import os
+import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from joblib import load
+
 from sklearn.inspection import permutation_importance
-from sklearn.decomposition import PCA
+
+from utils import load_data
+from scenarios import scenario_1_split, scenario_2_split, scenario_3_split
 
 
-# ================================================================
-# FEATURE IMPORTANCE HELPERS
-# ================================================================
-
-def perturbation_importance(model, X, score_type="prediction"):
-    n = X.shape[1]
-    importance = np.zeros(n)
-
-    if score_type == "prediction":
-        base = model.predict(X)
-    else:
-        base = model.decision_function(X)
-
-    for i in range(n):
-        Xp = X.copy()
-        Xp[:, i] += np.random.normal(0, 0.1, size=len(X))
-
-        if score_type == "prediction":
-            new = model.predict(Xp)
-            importance[i] = (base != new).sum()
-        else:
-            new = model.decision_function(Xp)
-            importance[i] = np.abs(base - new).sum()
-
-    return importance
+# =====================================================================
+# Ensure output folder exists
+# =====================================================================
+def ensure_dir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 
-def lof_importance(model, X):
-    base_pred = model.predict(X)
-    n = X.shape[1]
-    imp = np.zeros(n)
+# =====================================================================
+# Compute feature importance on latent features (no PCA)
+# =====================================================================
+def compute_importance(model, model_name, X_test, y_test, scenario_id):
+    """
+    Computes feature importance directly on latent features.
+    """
 
-    for i in range(n):
-        Xp = X.copy()
-        Xp[:, i] += np.random.normal(0, 0.1, size=len(X))
+    # Scenario 1 (OC models) → use f1_macro
+    scoring_method = "f1_macro" if scenario_id == 1 else "f1"
 
-        new_pred = model.predict(Xp)
-        imp[i] = (base_pred != new_pred).sum()
-
-    return imp
-
-
-def compute_importance_pca_space(model, model_name, X_pca, y):
-    name = model_name.lower()
-
-    if "randomforest" in name:
+    # RandomForest supports native feature_importances_
+    if "RandomForest" in model_name:
         return model.feature_importances_
 
-    if "svm" in name and "oc" not in name:
-        result = permutation_importance(model, X_pca, y, n_repeats=10)
-        return result.importances_mean
+    # Linear SVM supports coef_
+    if "SVM" in model_name and hasattr(model, "coef_"):
+        return np.abs(model.coef_).ravel()
 
-    if "knn" in name:
-        return perturbation_importance(model, X_pca, score_type="prediction")
+    # All other models → permutation importance
+    result = permutation_importance(
+        model,
+        X_test,
+        y_test,
+        n_repeats=10,
+        scoring=scoring_method,
+        random_state=42
+    )
 
-    if "ocsvm" in name:
-        return perturbation_importance(model, X_pca, score_type="decision")
-
-    if "elliptic" in name:
-        return np.abs(np.diag(model.precision_))
-
-    if "lof" in name:
-        return lof_importance(model, X_pca)
-
-    raise ValueError(f"No FI method for model {model_name}")
+    return result.importances_mean
 
 
-def pca_importance_to_raw(pca, fi_pca):
-    """
-    Back-project FI from PCA space into original latent features.
-    raw_FI = | PCA.components_.T × FI_pca |
-    """
-    components = pca.components_         # shape: (num_pcs, 8)
-    return np.abs(components.T @ fi_pca)  # → shape (8,)
+# =====================================================================
+# Plot importance
+# =====================================================================
+def plot_importance(values, scenario_id, model_name, fold_idx, out_dir):
+    sorted_idx = np.argsort(values)[::-1]
+    sorted_vals = values[sorted_idx]
 
-
-# ================================================================
-# PLOTTING
-# ================================================================
-
-def plot_importance(importance, names, model_name, out_path):
-    idx = np.argsort(importance)[::-1]
-    imp_sorted = importance[idx]
-    names_sorted = [names[i] for i in idx]
-
-    plt.figure(figsize=(10, 4))
-    plt.bar(range(len(imp_sorted)), imp_sorted)
-    plt.xticks(range(len(imp_sorted)), names_sorted, rotation=90)
-    plt.title(f"Feature Importance — {model_name}")
+    plt.figure(figsize=(10, 5))
+    plt.bar(range(len(sorted_vals)), sorted_vals)
+    plt.title(f"Scenario {scenario_id} — {model_name} — Fold {fold_idx+1}")
+    plt.xlabel("Latent Feature Index (sorted)")
+    plt.ylabel("Importance Score")
     plt.tight_layout()
-    plt.savefig(out_path)
+
+    path = f"{out_dir}/{model_name}_Fold{fold_idx+1}.png"
+    plt.savefig(path)
     plt.close()
 
 
-# ================================================================
-# MAIN PIPELINE
-# ================================================================
+# =====================================================================
+# Process a full scenario
+# =====================================================================
+def process_scenario(
+    scenario_id,
+    latent_file,
+    y,
+    scenario_fn,
+    model_names
+):
+    print(f"\n=== Processing Scenario {scenario_id} ===")
 
-def run_task3_partA(latent_path, model_dir, scenario_id):
+    # Load latent features (no PCA anymore)
+    Z = np.load(latent_file)
+    X_df = pd.DataFrame(Z)
 
-    print("\n=== Loading latent features ===")
-    Z = np.load(latent_path)
-    print("Latent shape:", Z.shape)
+    # Output folder
+    out_dir = f"Task3_Results/Scenario{scenario_id}/FeatureImportance"
+    ensure_dir(out_dir)
 
-    # ------------------------------------------------------------
-    # Load TRUE LABELS directly from original dataset (correct!)
-    # ------------------------------------------------------------
-    print("Loading labels from original dataset (train1 + test1)...")
-    from utils import load_data
+    # Iterate ML models
+    for model_name in model_names:
+        print(f"\n→ Computing importance for model: {model_name}")
 
-    _, y = load_data(
+        # Iterate folds
+        for split in scenario_fn(X_df, y, k=5):
+
+            # Scenario 1 split
+            if scenario_id == 1:
+                fold_idx, train_idx, test_idx = split
+            else:
+                fold_idx, attack_id, train_idx, test_idx = split
+
+            # Extract latent features for this fold
+            X_train = Z[train_idx]
+            X_test = Z[test_idx]
+            y_test = y.iloc[test_idx].values
+
+            # Load trained model
+            model_path = f"saved_models/Scenario{scenario_id}/{model_name}_Fold{fold_idx+1}.joblib"
+            model = joblib.load(model_path)
+
+            # Compute latent feature importance
+            importance_vals = compute_importance(model, model_name, X_test, y_test, scenario_id)
+
+            # Save raw CSV sorted
+            df = pd.DataFrame({
+                "Latent_Feature": np.arange(len(importance_vals)),
+                "Importance": importance_vals
+            }).sort_values("Importance", ascending=False)
+
+            df.to_csv(f"{out_dir}/{model_name}_Fold{fold_idx+1}.csv", index=False)
+
+            # Plot importance
+            plot_importance(importance_vals, scenario_id, model_name, fold_idx, out_dir)
+
+    print(f"✓ Scenario {scenario_id} completed.")
+
+
+# =====================================================================
+# MAIN SCRIPT
+# =====================================================================
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--latent_reconstruction",
+        required=True,
+        help="Latent features for Scenario 1 (reconstruction VAE)"
+    )
+    parser.add_argument(
+        "--latent_classification",
+        required=True,
+        help="Latent features for Scenarios 2 & 3 (classification VAE)"
+    )
+    args = parser.parse_args()
+
+    print("Loading labels... (same as Task 2)")
+    X_raw, y = load_data(
         ["../../datasets/hai-22.04/train1.csv"],
         ["../../datasets/hai-22.04/test1.csv"]
     )
-    y = np.array(y).astype(int)
+    y = pd.Series(y).astype(int)
 
-    feature_names = [f"f{i}" for i in range(Z.shape[1])]
+    # Scenario 1
+    process_scenario(
+        scenario_id=1,
+        latent_file=args.latent_reconstruction,
+        y=y,
+        scenario_fn=scenario_1_split,
+        model_names=["OCSVM", "LOF", "EllipticEnvelope"]
+    )
 
-    out_dir = f"Task3_Results/Scenario{scenario_id}/FeatureImportance"
-    os.makedirs(out_dir, exist_ok=True)
+    # Scenario 2
+    process_scenario(
+        scenario_id=2,
+        latent_file=args.latent_classification,
+        y=y,
+        scenario_fn=scenario_2_split,
+        model_names=["SVM", "kNN", "RandomForest"]
+    )
 
-    print(f"\n=== Using models from {model_dir} ===")
-    model_files = sorted([f for f in os.listdir(model_dir) if f.endswith(".joblib")])
+    # Scenario 3
+    process_scenario(
+        scenario_id=3,
+        latent_file=args.latent_classification,
+        y=y,
+        scenario_fn=scenario_3_split,
+        model_names=["SVM", "kNN", "RandomForest"]
+    )
 
-    # ------------------------------------------------------------
-    # For each saved model (each fold)
-    # ------------------------------------------------------------
-    for mfile in model_files:
-        model_name = mfile.replace(".joblib", "")
-        fold = int(model_name.split("_Fold")[-1])
-        model = load(os.path.join(model_dir, mfile))
-
-        print(f"\n[+] Processing {model_name}")
-
-        # Load Task2 prediction file to recover test indices
-        pred_path = f"exports/Scenario{scenario_id}/{model_name.split('_Fold')[0]}/Predictions_Fold{fold}.csv"
-        df_pred = pd.read_csv(pred_path)
-        test_idx = df_pred.index.values
-        train_idx = np.setdiff1d(np.arange(len(Z)), test_idx)
-
-        # ----------------------------------------------------
-        # Rebuild PCA for that fold (same as Task2)
-        # ----------------------------------------------------
-        pca = PCA(n_components=0.95)
-        pca.fit(Z[train_idx])
-        Z_pca = pca.transform(Z)
-
-        # ----------------------------------------------------
-        # Compute feature importance in PCA space
-        # ----------------------------------------------------
-        fi_pca = compute_importance_pca_space(model, model_name, Z_pca, y)
-
-        # ----------------------------------------------------
-        # Convert PCA FI → raw latent FI
-        # ----------------------------------------------------
-        fi_raw = pca_importance_to_raw(pca, fi_pca)
-
-        # ----------------------------------------------------
-        # Save plot for f0–f7
-        # ----------------------------------------------------
-        out_path = f"{out_dir}/FI_{model_name}.png"
-        plot_importance(fi_raw, feature_names, model_name, out_path)
-
-        print(f"   Saved: {out_path}")
-
-    print("\n=== Task 3(a) Complete — PCA Back-Projected FI ===")
-
-
-# ================================================================
-# ENTRY POINT
-# ================================================================
-
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Task 3(a) Feature Importance with PCA Back-Projection")
-    parser.add_argument("--latent", required=True)
-    parser.add_argument("--models", required=True)
-    parser.add_argument("--scenario", required=True)
-    args = parser.parse_args()
-
-    run_task3_partA(args.latent, args.models, args.scenario)
+    print("\n=== Task 3(a) Completed Successfully ===")
