@@ -1,253 +1,293 @@
+import time
+import psutil
 import numpy as np
-from sklearn.svm import OneClassSVM
+from sklearn.svm import OneClassSVM, SVC
 from sklearn.covariance import EllipticEnvelope
-from sklearn.neighbors import LocalOutlierFactor
-from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import LocalOutlierFactor, KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.decomposition import PCA
 from utils2 import optimal_param_search
 
+process = psutil.Process()
+
+
+# =====================================================================
+# Utility timing wrappers
+# =====================================================================
+def measure_feature_step(func):
+    start = time.time()
+    mem_before = process.memory_info().rss
+    out = func()
+    mem_after = process.memory_info().rss
+    return out, (time.time() - start), (mem_after - mem_before)
+
+
+def measure_classification_step(func):
+    start = time.time()
+    mem_before = process.memory_info().rss
+    out = func()
+    mem_after = process.memory_info().rss
+    return out, (time.time() - start), (mem_after - mem_before)
+
+
+# =====================================================================
+# One-Class SVM (Scenario 1)
+# =====================================================================
 def run_OneClassSVM(X, y, k, scenario_fn):
 
-    param_grid_ocsvm = {
-    'nu': [0.001], # 0.01, 0.05 
-    'gamma': ['scale'] # 0.1 0.01, 0.001 
-    }
+    param_grid = {'nu': [0.001], 'gamma': ['scale']}
+    def build_model(params): return OneClassSVM(kernel="rbf", **params)
 
-    def build_ocsvm(params):
-        return OneClassSVM(kernel='rbf', **params)
+    best_params, _ = optimal_param_search(X, y, scenario_fn, build_model, param_grid)
+    print("Best OCSVM params:", best_params)
 
-    best_params_ocsvm, results_ocsvm = optimal_param_search(X, y, scenario_fn, build_ocsvm, param_grid_ocsvm) 
-    print("Best parameters found for One-Class SVM:", best_params_ocsvm)
-    #best_params_ocsvm = {'nu': 0.001, 'gamma': 'scale'}  # Pre-determined best params
-    all_fold_predictions = []   # store for later if needed
-    # nu: 0.001, gamma: scale
     pca = PCA(n_components=0.95)
+    all_results = []
+
     for fold_idx, train_idx, test_idx in scenario_fn(X, y, k):
 
-        #xtest is feature data used to testing
-        X_train , X_test = X.iloc[train_idx] , X.iloc[test_idx]    # labeled      # normal fold + all attacks
-        y_test  = y.iloc[test_idx] # test set for current fold # binary label of testing attack or no 
-        print(f"Training One-Class SVM with params: {best_params_ocsvm} on fold {fold_idx+1}...")
-        X_train_reduced = pca.fit_transform(X_train)
-        X_test_reduced = pca.transform(X_test)
-        ocsvm = OneClassSVM(kernel='rbf', **best_params_ocsvm)  # best_params_ocsvm
-        ocsvm.fit(X_train_reduced)
-        print(f"Predicting on test set for fold {fold_idx+1}...")
-        # OC-SVM outputs: +1 normal, -1 anomaly
-        y_pred_raw = ocsvm.predict(X_test_reduced)
+        X_train = X.iloc[train_idx]
+        X_test  = X.iloc[test_idx]
+        y_test  = y.iloc[test_idx].values
 
-        # Map: -1 → attack(1), 1 → normal(0)
+        # PCA feature extraction
+        (pca_out, fe_time, fe_mem) = measure_feature_step(
+            lambda: (pca.fit_transform(X_train), pca.transform(X_test))
+        )
+        X_train_red, X_test_red = pca_out
+
+        # Classification
+        model = OneClassSVM(kernel="rbf", **best_params)
+        (_, clf_time, clf_mem) = measure_classification_step(
+            lambda: model.fit(X_train_red)
+        )
+
+        y_pred_raw = model.predict(X_test_red)
         y_pred = np.where(y_pred_raw == -1, 1, 0)
 
-        acc = np.mean(y_pred == y_test)
-        print(f"Fold {fold_idx+1}: Accuracy = {acc:.4f} | Train={len(train_idx)} | Test={len(test_idx)}")
+        all_results.append(
+            (fold_idx, test_idx, y_pred, y_test, model,
+             fe_time, fe_mem, clf_time, clf_mem)
+        )
 
-        # Save fold results
-        all_fold_predictions.append((fold_idx, test_idx, y_pred, y_test.values))
+    return all_results
 
-    return all_fold_predictions
 
+# =====================================================================
+# Elliptic Envelope (Scenario 1)
+# =====================================================================
 def run_EllipticEnvelope(X, y, k, scenario_fn):
-    param_grid_ee = {
-    'contamination': [0.001],# 0.01, 0.05
-    'support_fraction': [None]# 0.7, 0.9
-    }
 
-    def build_elliptic(params):
-        return EllipticEnvelope(**params, random_state=42)
-    
-    best_params_ee, results_ee = optimal_param_search(X, y, scenario_fn, build_elliptic, param_grid_ee)
-    print("Best parameters found for EllipticEnvelope:", best_params_ee)
-    #best_params_ee = {'contamination': 0.001, 'support_fraction': None}  # Pre-determined best params
-    all_fold_predictions = []
+    param_grid = {'contamination': [0.001], 'support_fraction': [None]}
+    def build_model(params): return EllipticEnvelope(**params, random_state=42)
 
-    pca = PCA(n_components=0.95)  # Keep 95% of variance
-
-    for fold_idx, train_idx, test_idx in scenario_fn(X, y ,k ):
-
-        X_train = X.iloc[train_idx]        # normal only
-        X_test  = X.iloc[test_idx]         # normal fold + all attacks
-        y_test  = y.iloc[test_idx]
-
-        X_train_reduced = pca.fit_transform(X_train)
-        X_test_reduced = pca.transform(X_test)
-        # Create model
-        ee = EllipticEnvelope(**best_params_ee, random_state=42) # gives warning due to high demensionality
-        print(f"Training EllipticEnvelope with params: {best_params_ee} on fold {fold_idx+1}...")   
-        # Fit ONLY normal
-        ee.fit(X_train_reduced)
-
-        # Predict on test
-        y_pred_raw = ee.predict(X_test_reduced)   # +1 normal, -1 outlier
-        y_pred = np.where(y_pred_raw == -1, 1, 0)   # convert to 0/1
-
-        # Accuracy
-        acc = np.mean(y_pred == y_test)
-        print(f"Fold {fold_idx+1}: EllipticEnvelope Accuracy = {acc:.4f} | Train={len(train_idx)} | Test={len(test_idx)}")
-
-        # Store for later
-        all_fold_predictions.append((fold_idx, test_idx, y_pred, y_test.values))
-
-    return all_fold_predictions
-
-def run_LOF(X, y, k, scenario_fn):
-    param_grid_lof = {
-    'n_neighbors': [10],#, 20, 30, 50
-    'metric': ['euclidean'] # 'manhattan'
-    }
-
-    def build_lof(params):
-        return LocalOutlierFactor( novelty=True,**params)
-    
-    best_params_lof, results_lof = optimal_param_search(X, y, scenario_fn, build_lof, param_grid_lof)
-    print("Best parameters found for LOF:", best_params_lof)
-    #best_params_lof = {'n_neighbors': 20, 'metric': 'euclidean'}  # Pre-determined best params
-    all_fold_predictions = []
+    best_params, _ = optimal_param_search(X, y, scenario_fn, build_model, param_grid)
+    print("Best EE params:", best_params)
 
     pca = PCA(n_components=0.95)
+    all_results = []
 
     for fold_idx, train_idx, test_idx in scenario_fn(X, y, k):
 
-        X_train = X.iloc[train_idx]      # normal only
-        X_test  = X.iloc[test_idx]       # normal + attack
-        y_test  = y.iloc[test_idx]
+        X_train = X.iloc[train_idx]
+        X_test  = X.iloc[test_idx]
+        y_test  = y.iloc[test_idx].values
 
-        # LOF model (novelty=True allows .predict on X_test)
-        lof = LocalOutlierFactor(
-            **best_params_lof,
-            novelty=True
+        (pca_out, fe_time, fe_mem) = measure_feature_step(
+            lambda: (pca.fit_transform(X_train), pca.transform(X_test))
         )
-        X_train_reduced = pca.fit_transform(X_train) #computes the PCA parameters (mean, components, etc.) from the training data and applies the transformation.
-        X_test_reduced = pca.transform(X_test) #uses the already-computed PCA parameters from the training data to transform the test data.
-        print(f"Training LOF with params: {best_params_lof} on fold {fold_idx+1}...")
-        # Fit ONLY normal samples
-        lof.fit(X_train_reduced)
+        X_train_red, X_test_red = pca_out
 
-        # Predict on test
-        y_pred_raw = lof.predict(X_test_reduced)     # +1 normal, -1 outlier
+        model = EllipticEnvelope(**best_params, random_state=42)
+        (_, clf_time, clf_mem) = measure_classification_step(
+            lambda: model.fit(X_train_red)
+        )
+
+        y_pred_raw = model.predict(X_test_red)
         y_pred = np.where(y_pred_raw == -1, 1, 0)
 
-        # Accuracy
-        acc = np.mean(y_pred == y_test)
-        print(f"Fold {fold_idx+1}: LOF Accuracy = {acc:.4f} | Train={len(train_idx)} | Test={len(test_idx)}")
-
-        # Store results
-        all_fold_predictions.append((fold_idx, test_idx, y_pred, y_test.values))
-
-    return all_fold_predictions
-
-def run_binary_svm(X, y, k, scenario_fn):
-     
-    param_grid_binary_svm = {
-    'C': [10.0],#0.1, 1, 
-    'gamma': ['scale'], # 0.01, 0.001
-    }
-    def build_binary_svm(params):
-        return SVC(C=params['C'], gamma=params['gamma'], kernel='rbf')
-    # best_params_svm, results_svm = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_binary_svm, param_grid_binary_svm)
-    best_params_svm = {'C': 10.0, 'gamma': 'scale'}  # Pre-determined best params
-    svm_predictions = []
-    pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
-
-        X_train = X.iloc[train_idx]
-        X_test  = X.iloc[test_idx]
-        y_train = y.iloc[train_idx]
-        y_test  = y.iloc[test_idx]
-
-        X_train_reduced = pca.fit_transform(X_train)
-        X_test_reduced = pca.transform(X_test)
-
-        model = SVC(**best_params_svm, kernel='rbf') #class_weight='balanced'
-        model.fit(X_train_reduced, y_train)
-
-        y_pred = model.predict(X_test_reduced)
-        acc = (y_pred == y_test).mean()
-
-        print(f"Fold {fold_idx+1}, AttackID={attack_id}: Accuracy={acc:.4f} | Train={len(train_idx)}, Test={len(test_idx)}")
-
-        svm_predictions.append((fold_idx, attack_id, test_idx, y_pred, y_test.values))
-
-    return svm_predictions
-
-def run_knn(X, y, k,scenario_fn):
-
-    def build_knn(params):
-        return KNeighborsClassifier(
-        n_neighbors=params['n_neighbors'],
-        weights=params['weights'],
-        metric=params['metric']
+        all_results.append(
+            (fold_idx, test_idx, y_pred, y_test, model,
+             fe_time, fe_mem, clf_time, clf_mem)
         )
 
-    param_grid_knn = {
-    'n_neighbors': [3],  #, 5, 7, 11  
-    'weights': ['uniform'], # 'distance'
-    'metric': ['euclidean'] #  'manhattan'
-    }
-    best_params_knn, results_knn = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_knn, param_grid_knn)
-    print("Best parameters found for kNN:", best_params_knn)
-    #best_params_knn = {'n_neighbors': 3, 'weights': 'uniform', 'metric': 'euclidean'}
-    all_predictions = []
+    return all_results
+
+
+# =====================================================================
+# LOF (Scenario 1)
+# =====================================================================
+def run_LOF(X, y, k, scenario_fn):
+
+    param_grid = {'n_neighbors': [10], 'metric': ['euclidean']}
+    def build_model(params): return LocalOutlierFactor(novelty=True, **params)
+
+    best_params, _ = optimal_param_search(X, y, scenario_fn, build_model, param_grid)
+    print("Best LOF params:", best_params)
+
     pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
+    all_results = []
+
+    for fold_idx, train_idx, test_idx in scenario_fn(X, y, k):
+
+        X_train = X.iloc[train_idx]
+        X_test  = X.iloc[test_idx]
+        y_test  = y.iloc[test_idx].values
+
+        (pca_out, fe_time, fe_mem) = measure_feature_step(
+            lambda: (pca.fit_transform(X_train), pca.transform(X_test))
+        )
+        X_train_red, X_test_red = pca_out
+
+        model = LocalOutlierFactor(**best_params, novelty=True)
+        (_, clf_time, clf_mem) = measure_classification_step(
+            lambda: model.fit(X_train_red)
+        )
+
+        y_pred_raw = model.predict(X_test_red)
+        y_pred = np.where(y_pred_raw == -1, 1, 0)
+
+        all_results.append(
+            (fold_idx, test_idx, y_pred, y_test, model,
+             fe_time, fe_mem, clf_time, clf_mem)
+        )
+
+    return all_results
+
+
+# =====================================================================
+# Binary SVM (Scenario 2 & 3)
+# =====================================================================
+def run_binary_svm(X, y, k, scenario_fn):
+
+    best_params = {'C': 10.0, 'gamma': 'scale'}
+    pca = PCA(n_components=0.95)
+    all_results = []
+
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, k):
 
         X_train = X.iloc[train_idx]
         X_test  = X.iloc[test_idx]
         y_train = y.iloc[train_idx]
-        y_test  = y.iloc[test_idx]
-        
-        X_train_reduced = pca.fit_transform(X_train)
-        X_test_reduced = pca.transform(X_test)
+        y_test  = y.iloc[test_idx].values
 
-        model = KNeighborsClassifier(**best_params_knn)
+        (pca_out, fe_time, fe_mem) = measure_feature_step(
+            lambda: (pca.fit_transform(X_train), pca.transform(X_test))
+        )
+        X_train_red, X_test_red = pca_out
 
-        model.fit(X_train_reduced, y_train)
-        y_pred = model.predict(X_test_reduced)
-        acc = (y_pred == y_test).mean()
-        print(f"Fold {fold_idx+1}, AttackID={attack_id}: kNN Accuracy={acc:.4f}")
+        model = SVC(kernel="rbf", **best_params)
+        (_, clf_time, clf_mem) = measure_classification_step(
+            lambda: model.fit(X_train_red, y_train)
+        )
 
-        all_predictions.append((fold_idx, attack_id, test_idx, y_pred, y_test.values))
+        y_pred = model.predict(X_test_red)
 
-    return all_predictions
+        all_results.append(
+            (fold_idx, attack_id, test_idx, y_pred, y_test, model,
+             fe_time, fe_mem, clf_time, clf_mem)
+        )
 
+    return all_results
+
+
+# =====================================================================
+# kNN (Scenario 2 & 3)
+# =====================================================================
+def run_knn(X, y, k, scenario_fn):
+
+    param_grid = {
+        'n_neighbors': [3],
+        'weights': ['uniform'],
+        'metric': ['euclidean']
+    }
+    def build_model(params):
+        return KNeighborsClassifier(
+            n_neighbors=params['n_neighbors'],
+            weights=params['weights'],
+            metric=params['metric']
+        )
+
+    best_params, _ = optimal_param_search(X, y, lambda X, y: scenario_fn(X, y), build_model, param_grid)
+    print("Best kNN params:", best_params)
+
+    pca = PCA(n_components=0.95)
+    all_results = []
+
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, k):
+
+        X_train = X.iloc[train_idx]
+        X_test  = X.iloc[test_idx]
+        y_train = y.iloc[train_idx]
+        y_test  = y.iloc[test_idx].values
+
+        (pca_out, fe_time, fe_mem) = measure_feature_step(
+            lambda: (pca.fit_transform(X_train), pca.transform(X_test))
+        )
+        X_train_red, X_test_red = pca_out
+
+        model = KNeighborsClassifier(**best_params)
+        (_, clf_time, clf_mem) = measure_classification_step(
+            lambda: model.fit(X_train_red, y_train)
+        )
+
+        y_pred = model.predict(X_test_red)
+
+        all_results.append(
+            (fold_idx, attack_id, test_idx, y_pred, y_test, model,
+             fe_time, fe_mem, clf_time, clf_mem)
+        )
+
+    return all_results
+
+
+# =====================================================================
+# Random Forest (Scenario 2 & 3)
+# =====================================================================
 def run_random_forest(X, y, k, scenario_fn):
 
-    def build_rf(params):
+    param_grid = {
+        'n_estimators': [50],
+        'max_depth': [5],
+        'min_samples_split': [5]
+    }
+    def build_model(params):
         return RandomForestClassifier(
-        n_estimators=params['n_estimators'],
-        max_depth=params['max_depth'],
-        min_samples_split=params['min_samples_split'],
-        random_state=42,
-        n_jobs=-1     # use all cores
+            n_estimators=params['n_estimators'],
+            max_depth=params['max_depth'],
+            min_samples_split=params['min_samples_split'],
+            random_state=42,
+            n_jobs=-1
         )
 
-    param_grid_rf = {
-    'n_estimators': [50],#, 100, 200
-    'max_depth': [5],#, 10, None
-    'min_samples_split': [5] #2,
-    }
-    best_params_rf, results_rf = optimal_param_search(X, y, lambda X,y: scenario_fn(X,y), build_rf, param_grid_rf)
-    print("Best parameters found for Random Forest:", best_params_rf)
-    #best_params_rf = {'n_estimators': 50, 'max_depth': 5, 'min_samples_split': 5}
-    all_predictions = []
+    best_params, _ = optimal_param_search(X, y, lambda X, y: scenario_fn(X, y), build_model, param_grid)
+    print("Best RF params:", best_params)
+
     pca = PCA(n_components=0.95)
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y ,k):
+    all_results = []
+
+    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, k):
 
         X_train = X.iloc[train_idx]
         X_test  = X.iloc[test_idx]
         y_train = y.iloc[train_idx]
-        y_test  = y.iloc[test_idx]
-        X_train_reduced = pca.fit_transform(X_train)
-        X_test_reduced = pca.transform(X_test)
-        model = RandomForestClassifier(**best_params_rf, random_state=42)
+        y_test  = y.iloc[test_idx].values
 
-        model.fit(X_train_reduced, y_train)
-        y_pred = model.predict(X_test_reduced)
-        acc = (y_pred == y_test).mean()
-        print(f"Fold {fold_idx+1}, AttackID={attack_id}: Random Forest Accuracy={acc:.4f}")
+        (pca_out, fe_time, fe_mem) = measure_feature_step(
+            lambda: (pca.fit_transform(X_train), pca.transform(X_test))
+        )
+        X_train_red, X_test_red = pca_out
 
-        all_predictions.append((fold_idx, attack_id, test_idx, y_pred, y_test.values))
+        model = RandomForestClassifier(**best_params, random_state=42)
+        (_, clf_time, clf_mem) = measure_classification_step(
+            lambda: model.fit(X_train_red, y_train)
+        )
 
-    return all_predictions
+        y_pred = model.predict(X_test_red)
+
+        all_results.append(
+            (fold_idx, attack_id, test_idx, y_pred, y_test, model,
+             fe_time, fe_mem, clf_time, clf_mem)
+        )
+
+    return all_results
