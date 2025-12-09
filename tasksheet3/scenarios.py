@@ -122,7 +122,7 @@ def scenario_1_split(X, y, k=5, seed=42):
     attack_type, attack_intervals = extract_attack_types(y)
 
     normal_idx = np.where(y == 0)[0] # tuple returns indices for normal ( taking normal data indices)
-    balanced_attack_idx = get_balanced_attack_indices(attack_type)
+    _, balanced_attack_idx = get_balanced_attack_indices(attack_type)
 
     folds = make_kfold_indices(len(normal_idx), k, seed)
 
@@ -136,29 +136,35 @@ def scenario_1_split(X, y, k=5, seed=42):
         yield fold_idx, train_idx, test_idx
 
 def scenario_2_split(X, y, k=5, seed=42):
-    """
-    Scenario 2:
-      - Train on normal + (n−1) attack types (i.e., exclude one attack type)
-      - Test on normal fold + all attack types
-    """
-    
+
     attack_type, attack_intervals = extract_attack_types(y)
 
-    np.random.seed(None)
+    np.random.seed(seed)
 
     normal_idx = np.where(y == 0)[0]
-    held_out = np.random.choice(attack_intervals["attack_id"].unique()) # randomly select one attack type to hold out
-    train_attack_idx = get_balanced_attack_indices(attack_type, exclude_type=held_out)
-    test_attack_idx = get_balanced_attack_indices(attack_type, exclude_type=None)
+
+    # randomly select one attack type to hold out
+    held_out = int(np.random.choice(attack_intervals["attack_id"].unique()))
+
+    # CORRECT UNPACKING
+    train_attack_idx, _ = get_balanced_attack_indices(
+        attack_type,
+        held_out=held_out
+    )
+
+    _, test_attack_idx = get_balanced_attack_indices(
+        attack_type,
+        held_out=None
+    )
 
     folds = make_kfold_indices(len(normal_idx), k=k, seed=seed)
 
     for fold_idx in range(k):
-        test_normal_idx = normal_idx[folds[fold_idx]]
+        test_normal_idx  = normal_idx[folds[fold_idx]]
         train_normal_idx = np.setdiff1d(normal_idx, test_normal_idx)
 
         train_idx = np.concatenate([train_normal_idx, train_attack_idx])
-        test_idx = np.concatenate([test_normal_idx, test_attack_idx])
+        test_idx  = np.concatenate([test_normal_idx, test_attack_idx])
 
         yield fold_idx, held_out, train_idx, test_idx
 
