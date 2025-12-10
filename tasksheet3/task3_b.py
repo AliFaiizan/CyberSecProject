@@ -4,152 +4,129 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib_venn import venn3
-from upsetplot import UpSet, from_memberships
+from upsetplot import UpSet
 
 
-# -------------------------------------------------------
-# Load prediction errors (ML models)
-# -------------------------------------------------------
-def load_errors(pred_file):
-    df = pd.read_csv(pred_file)
+# ---------------------------------------------------------
+# Load true error indices (0..N_test-1) for a model fold
+# ---------------------------------------------------------
+def load_errors(csv_path):
+    df = pd.read_csv(csv_path)
+    df.columns = [c.strip().replace("\ufeff", "") for c in df.columns]
     y_true = df["Attack"].values
     y_pred = df["predicted_label"].values
-    return set(np.where(y_pred != y_true)[0]), len(df)
+    return set(np.where(y_pred != y_true)[0])
 
 
-# -------------------------------------------------------
-# CNN window → sample mapping
-# -------------------------------------------------------
-def load_cnn_errors(pred_file, test_indices, M=20):
-    df = pd.read_csv(pred_file)
-    y_true = df["Attack"].values
-    y_pred = df["predicted_label"].values
-
-    win_errors = np.where(y_pred != y_true)[0]
-    mapped = set()
-
-    for w in win_errors:
-        center = w + M//2
-        if center in test_indices:
-            mapped.add(center)
-
-    return mapped
+# ---------------------------------------------------------
+# Find prediction files per model
+# ---------------------------------------------------------
+def find_prediction_files(folder):
+    files = []
+    for f in os.listdir(folder):
+        if f.endswith(".csv") and "Predictions_Fold" in f and "metrics" not in f.lower():
+            files.append(os.path.join(folder, f))
+    return sorted(files)
 
 
-# -------------------------------------------------------
-# Plot Venn for Scenario 1
-# -------------------------------------------------------
-def plot_venn_scenario1(fold, errors):
-    ocsvm, lof, ee = errors
-
-    plt.figure(figsize=(8, 8))
-    venn3(
-        subsets=(ocsvm, lof, ee),
-        set_labels=("OCSVM", "LOF", "EE"),
-        set_colors=("red", "green", "blue"),
-        alpha=0.5
-    )
-    plt.title(f"Scenario 1 – Venn Diagram (Fold {fold})")
-
-    out = "Task3_Results/Scenario1/Venn"
-    os.makedirs(out, exist_ok=True)
-    plt.savefig(f"{out}/Venn_Fold{fold}.png", dpi=300)
+# ---------------------------------------------------------
+# Venn diagram (Scenario 1)
+# ---------------------------------------------------------
+def plot_venn3(err1, err2, err3, labels, out):
+    plt.figure(figsize=(7, 7))
+    venn3([err1, err2, err3], set_labels=labels)
+    plt.title("Classification Error Overlap")
+    plt.tight_layout()
+    plt.savefig(out)
     plt.close()
+    print("[SAVED]", out)
 
 
-# -------------------------------------------------------
-# Plot UpSet for Scenario 2 & 3
-# -------------------------------------------------------
-def plot_upset_scenario23(fold, scenario, error_dict):
-    # Create membership lists
-    memberships = []
-    max_index = max([max(s) if len(s) > 0 else 0 for s in error_dict.values()])
+# ---------------------------------------------------------
+# Correct UpSet Plot using aligned indices
+# ---------------------------------------------------------
+def plot_upset(error_dict, fold_idx, out_file):
+    models = list(error_dict.keys())
 
-    for idx in range(max_index + 1):
-        present = [model for model, errs in error_dict.items() if idx in errs]
-        if present:
-            memberships.append(present)
+    # Build membership rows (one per misclassified index across all models)
+    membership_rows = []
 
-    if len(memberships) == 0:
-        memberships = [[]]
+    all_indices = sorted(set().union(*error_dict.values()))
 
-    data = from_memberships(memberships)
+    for idx in all_indices:
+        row = {m: (idx in error_dict[m]) for m in models}
+        membership_rows.append(row)
 
-    plt.figure(figsize=(12, 6))
-    upset = UpSet(data, subset_size='count', show_counts=True)
-    upset.plot()
+    df = pd.DataFrame(membership_rows)
 
-    plt.suptitle(f"Scenario {scenario} – UpSet Plot (Fold {fold})")
-
-    out = f"Task3_Results/Scenario{scenario}/UpSet"
-    os.makedirs(out, exist_ok=True)
-    plt.savefig(f"{out}/UpSet_Fold{fold}.png", dpi=300)
+    plt.figure(figsize=(10, 6))
+    UpSet(df, subset_size="count", show_counts=True).plot()
+    plt.title(f"Classification Error Overlap – Fold {fold_idx}")
+    plt.savefig(out_file)
     plt.close()
+    print("[SAVED]", out_file)
 
 
-# -------------------------------------------------------
-# Main Task 3(b)
-# -------------------------------------------------------
-def run_task3_b(scenario, M=20):
-    print(f"\n=== RUNNING TASK 3(b) FOR SCENARIO {scenario} ===")
+# ---------------------------------------------------------
+# Main
+# ---------------------------------------------------------
+def run_task3b(scenario):
 
-    base = f"exports/Scenario{scenario}"
-    num_folds = 5
+    base_dir = f"exports/Scenario{scenario}"
+    out_dir = f"task3b_errors/Scenario{scenario}"
+    os.makedirs(out_dir, exist_ok=True)
 
-    for fold in range(1, num_folds + 1):
-        print(f"\n[ Fold {fold} ]")
+    print(f"[INFO] Processing Scenario {scenario}")
 
-        # ---------------- SCENARIO 1 --------------------
-        if scenario == 1:
-            ocsvm = f"{base}/OCSVM/Predictions_Fold{fold}.csv"
-            lof   = f"{base}/LOF/Predictions_Fold{fold}.csv"
-            ee    = f"{base}/EllipticEnvelope/Predictions_Fold{fold}.csv"
-
-            err_oc, _ = load_errors(ocsvm)
-            err_lo, _ = load_errors(lof)
-            err_ee, _ = load_errors(ee)
-
-            plot_venn_scenario1(fold, (err_oc, err_lo, err_ee))
-            continue
-
-        # ---------------- SCENARIO 2 & 3 --------------------
-        svm = f"{base}/SVM/Predictions_Fold{fold}.csv"
-        knn = f"{base}/kNN/Predictions_Fold{fold}.csv"
-        rf  = f"{base}/RandomForest/Predictions_Fold{fold}.csv"
-        cnn = f"{base}/CNN/Predictions_Fold{fold}.csv"
-
-        # Load ML errors
-        err_svm, N = load_errors(svm)
-        err_knn, _ = load_errors(knn)
-        err_rf, _  = load_errors(rf)
-
-        # Test indices
-        test_indices = set(range(N))
-
-        # CNN errors
-        err_cnn = load_cnn_errors(cnn, test_indices, M)
-
-        error_dict = {
-            "SVM": err_svm,
-            "kNN": err_knn,
-            "RF": err_rf,
-            "CNN": err_cnn
+    if scenario == 1:
+        model_paths = {
+            "OCSVM": os.path.join(base_dir, "OCSVM"),
+            "LOF": os.path.join(base_dir, "LOF"),
+            "EE": os.path.join(base_dir, "EllipticEnvelope")
+        }
+    else:
+        model_paths = {
+            "SVM": os.path.join(base_dir, "SVM"),
+            "kNN": os.path.join(base_dir, "kNN"),
+            "RF": os.path.join(base_dir, "RandomForest"),
+            "CNN": os.path.join(base_dir, "CNN")
         }
 
-        plot_upset_scenario23(fold, scenario, error_dict)
+    # Load folds
+    folds = {m: find_prediction_files(folder) for m, folder in model_paths.items()}
+    num_folds = len(next(iter(folds.values())))
 
-    print(f"\n=== TASK 3(b) COMPLETED FOR SCENARIO {scenario} ===")
+    # ---------------------------------------------------------
+    # Process each fold
+    # ---------------------------------------------------------
+    for f in range(num_folds):
+        print(f"\n[INFO] FOLD {f+1}")
+
+        errors = {}
+        for model in model_paths:
+            pred_file = folds[model][f]
+            print(f"[LOADING] {model} → {pred_file}")
+            errors[model] = load_errors(pred_file)
+
+        # Scenario 1 → Venn
+        if scenario == 1:
+            out = f"{out_dir}/venn_scenario1_fold{f+1}.png"
+            plot_venn3(errors["OCSVM"], errors["LOF"], errors["EE"],
+                       labels=("OCSVM", "LOF", "EllipticEnvelope"),
+                       out=out)
+
+        # Scenario 2 & 3 → UpSet
+        else:
+            out = f"{out_dir}/upset_scenario{scenario}_fold{f+1}.png"
+            plot_upset(errors, f+1, out)
 
 
-# -------------------------------------------------------
-# CLI ENTRY
-# -------------------------------------------------------
+# ---------------------------------------------------------
+# CLI
+# ---------------------------------------------------------
 if __name__ == "__main__":
     import argparse
-
-    parser = argparse.ArgumentParser("Task 3(b) – Venn + UpSet")
-    parser.add_argument("--scenario", type=int, required=True)
-    parser.add_argument("--M", type=int, default=20)
-
+    parser = argparse.ArgumentParser(description="Task 3(b): Error Overlap")
+    parser.add_argument("--scenario", type=int, required=True, choices=[1, 2, 3])
     args = parser.parse_args()
-    run_task3_b(args.scenario, args.M)
+    run_task3b(args.scenario)
