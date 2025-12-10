@@ -45,27 +45,45 @@ def plot_venn3(err1, err2, err3, labels, out):
 # ---------------------------------------------------------
 # Correct UpSet Plot using aligned indices
 # ---------------------------------------------------------
-def plot_upset(error_dict, fold_idx, out_file):
+def plot_upset(error_dict, fold_idx, out):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from upsetplot import UpSet
+
     models = list(error_dict.keys())
 
-    # Build membership rows (one per misclassified index across all models)
-    membership_rows = []
+    # Build membership table
+    rows = []
+    for m in models:
+        for idx in error_dict[m]:
+            rows.append({"id": idx, m: True})
 
-    all_indices = sorted(set().union(*error_dict.values()))
+    df = pd.DataFrame(rows)
+    df = df.pivot_table(index="id", aggfunc="max").fillna(False)
 
-    for idx in all_indices:
-        row = {m: (idx in error_dict[m]) for m in models}
-        membership_rows.append(row)
+    # Convert to MultiIndex
+    df.index = pd.MultiIndex.from_frame(df[models])
+    df = df.drop(columns=models)
 
-    df = pd.DataFrame(membership_rows)
+    # MUCH BIGGER FIGURE + tuning layout
+    plt.figure(figsize=(14, 10))
+    upset = UpSet(
+        df,
+        subset_size="count",
+        show_counts=True,
+        sort_by="cardinality",
+        facecolor="black",
+        with_lines=True,
+        intersection_plot_elements=12,   # make intersections bigger
+        element_size=40                 # enlarge dots
+    )
+    upset.plot()
 
-    plt.figure(figsize=(10, 6))
-    UpSet(df, subset_size="count", show_counts=True).plot()
-    plt.title(f"Classification Error Overlap – Fold {fold_idx}")
-    plt.savefig(out_file)
+    plt.suptitle(f"Classification Error Overlap – Fold {fold_idx}", fontsize=18, y=1.02)
+    plt.savefig(out, bbox_inches="tight", dpi=200)
     plt.close()
-    print("[SAVED]", out_file)
 
+    print("[SAVED]", out)
 
 # ---------------------------------------------------------
 # Main

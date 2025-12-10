@@ -54,14 +54,17 @@ def build_cnn(input_shape, lr=1e-3, dropout_rate=0.3):
     model.add(Dropout(dropout_rate))
     model.add(Dense(2, activation="softmax"))
 
-    model.compile(optimizer=Adam(lr), loss="categorical_crossentropy", metrics=["accuracy"])
+    model.compile(optimizer=Adam(lr),
+                  loss="categorical_crossentropy",
+                  metrics=["accuracy"])
     return model
 
 
 # =====================================================================
-# Main CNN routine
+# Main CNN routine (NOW RETURNS test_idx)
 # =====================================================================
 def run_cnn_latent(Z, y, scenario_id, k, out_dir, M=20, epochs=5):
+
     os.makedirs(out_dir, exist_ok=True)
 
     if scenario_id == 2:
@@ -75,39 +78,53 @@ def run_cnn_latent(Z, y, scenario_id, k, out_dir, M=20, epochs=5):
     results = []
 
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(Z, pd.Series(y), k):
+
         print(f"\n[CNN] Fold {fold_idx+1} (Attack {attack_id})")
 
         Z_train, y_train = Z[train_idx], y[train_idx]
-        Z_test, y_test   = Z[test_idx], y[test_idx]
+        Z_test,  y_test  = Z[test_idx], y[test_idx]
 
+        # -------------------------------
         # Standard scaling
+        # -------------------------------
         start = time.time()
         mem_before = process.memory_info().rss
+
         scaler = StandardScaler()
         Z_train = scaler.fit_transform(Z_train)
         Z_test  = scaler.transform(Z_test)
+
         fe1_time = time.time() - start
         fe1_mem  = process.memory_info().rss - mem_before
 
-        # Window generation
+        # -------------------------------
+        # Generate windows for train + test
+        # -------------------------------
         start = time.time()
         mem_before = process.memory_info().rss
+
         X_train_w, y_train_w = create_windows(Z_train, y_train, M)
         X_test_w,  y_test_w  = create_windows(Z_test,  y_test,  M)
+
         fe2_time = time.time() - start
         fe2_mem  = process.memory_info().rss - mem_before
 
         if len(X_train_w) == 0 or len(X_test_w) == 0:
-            print("Skipping fold: empty window set.")
+            print("Skipping fold due to empty windows.")
             continue
 
+        # -------------------------------
+        # Convert labels to one-hot
+        # -------------------------------
         y_train_cat = to_categorical(y_train_w, 2)
         y_test_cat  = to_categorical(y_test_w, 2)
 
+        # -------------------------------
+        # Build and train CNN
+        # -------------------------------
         model = build_cnn((M, Z.shape[1]))
         early = EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True)
 
-        # CNN training
         start = time.time()
         mem_before = process.memory_info().rss
 
@@ -123,15 +140,26 @@ def run_cnn_latent(Z, y, scenario_id, k, out_dir, M=20, epochs=5):
         clf_time = time.time() - start
         clf_mem  = process.memory_info().rss - mem_before
 
-        # Save model and windows
+        # -------------------------------
+        # Save model + test windows
+        # -------------------------------
         model.save(f"{out_dir}/CNN_Fold{fold_idx+1}.h5")
         np.save(f"{out_dir}/X_test_windows_Fold{fold_idx+1}.npy", X_test_w)
         np.save(f"{out_dir}/y_test_windows_Fold{fold_idx+1}.npy", y_test_w)
 
-        results.append(
-            (fold_idx, model, X_test_w, y_test_w,
-             fe1_time + fe2_time, fe1_mem + fe2_mem,
-             clf_time, clf_mem)
-        )
+        # -------------------------------
+        # RETURN test_idx SO TASK 2 CAN MAP WINDOWS → ROWS
+        # -------------------------------
+        results.append((
+            fold_idx,
+            model,
+            X_test_w,
+            y_test_w,
+            fe1_time + fe2_time,
+            fe1_mem + fe2_mem,
+            clf_time,
+            clf_mem,
+            test_idx  
+        ))
 
     return results
