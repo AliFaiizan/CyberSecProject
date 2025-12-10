@@ -80,6 +80,32 @@ def run_and_save(model_name, run_fn, X_df, y_series, scenario_fn, k, scenario_id
 
     pd.DataFrame(rows).to_csv(f"{model_dir}/metrics_summary.csv", index=False)
 
+def map_windows_to_rows(window_preds, N, M):
+    """
+    Convert window-level predictions back into row-level predictions.
+    Uses averaging over overlapping windows.
+    
+    window_preds: array shape (N-M+1,)
+    N: original number of samples
+    M: window size
+    """
+    row_votes = np.zeros(N)
+    row_counts = np.zeros(N)
+
+    for w_idx in range(len(window_preds)):
+        start = w_idx
+        end = w_idx + M
+        for row in range(start, end):
+            row_votes[row] += window_preds[w_idx]
+            row_counts[row] += 1
+
+    # Avoid division by zero
+    row_counts[row_counts == 0] = 1
+
+    row_preds = row_votes / row_counts
+    row_preds = (row_preds >= 0.5).astype(int)  # majority vote
+
+    return row_preds
 
 # =====================================================================
 # MAIN
@@ -141,7 +167,18 @@ def main():
         rows = []
         for fold_idx, model, Xw, yw, fe_rt, fe_mem, clf_rt, clf_mem in cnn_res:
 
-            preds = np.argmax(model.predict(Xw, verbose=0), axis=1)
+            window_preds = np.argmax(model.predict(Xw, verbose=0), axis=1)
+
+# Convert window predictions → row predictions
+            N = len(y_series)   # full sequence length
+            row_preds = map_windows_to_rows(window_preds, N, M=20)
+            y_true_full = y_series.values
+
+            pd.DataFrame({
+                "predicted_label": row_preds,
+                "Attack": y_true_full
+            }).to_csv(f"{cnn_dir}/Predictions_Fold{fold_idx+1}.csv", index=False)
+
 
             tp = ((preds == 1) & (yw == 1)).sum()
             fp = ((preds == 1) & (yw == 0)).sum()
