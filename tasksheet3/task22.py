@@ -1,212 +1,380 @@
 #!/usr/bin/env python3
-import argparse, os, time, psutil
+"""
+Task 2 – Complete Experiment Pipeline (Tasksheet 3)
+
+Final Version – Option A Fix:
+- Normalizes data (prevents NaNs)
+- Trains VAE per fold
+- Extracts FULL latent Z for ML models (fixes .iloc index errors)
+- ML models operate on Z_full_df
+- CNN operates on Z_train / Z_test windows
+- Supports Scenarios 1 / 2 / 3 / all
+"""
+
+import os
+import time
+import argparse
+import psutil
 import numpy as np
 import pandas as pd
 
-# Load utils & scenarios
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import precision_score, recall_score
+
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+
+# ---------------- Project Imports ----------------
 from utils import load_data
-from scenarios import (
-    scenario_1_split,
-    scenario_2_split,
-    scenario_3_split,
+from scenarios import scenario_1_split, scenario_2_split, scenario_3_split
+
+from task1 import (
+    VAE,
+    train_vae_reconstruction,
+    train_vae_classification,
+    extract_latent_features
 )
 
-# ML models
 from models import (
     run_OneClassSVM,
-    run_EllipticEnvelope,
     run_LOF,
+    run_EllipticEnvelope,
     run_binary_svm,
     run_knn,
-    run_random_forest,
+    run_random_forest
 )
 
-# CNN for latent VAE features
-from task2_cnn_latent import run_cnn_latent
+from task2_ensemble import ensemble
+from task_cnn2 import run_cnn_latent
 
-# Ensemble
-from task2_ensemble import ensemble, load_pred
 
 process = psutil.Process()
 
 
-# -------------------------------------------------------------------
-# Helper to run ML models & save predictions + metrics
-# -------------------------------------------------------------------
-def run_and_save(model_name, run_fn, X_df, y_series, scenario_fn, k, scenario_id, out_base):
-
-    os.makedirs(out_base, exist_ok=True)
-    model_dir = os.path.join(out_base, model_name)
-    os.makedirs(model_dir, exist_ok=True)
-
-    print(f"\n[+] Running {model_name} on Scenario {scenario_id}...")
-
-    mem0 = process.memory_info().rss
+# ---------------------------------------------------------
+# Measure runtime + memory
+# ---------------------------------------------------------
+def measure(func, *args, **kwargs):
+    mem_before = process.memory_info().rss
     t0 = time.time()
-
-    # call ML model → returns a list of results from all folds
-    results = run_fn(X_df, y_series, k, scenario_fn)
-
-    t1 = time.time()
-    mem1 = process.memory_info().rss
-
-    runtime = t1 - t0
-    mem_used = mem1 - mem0
-
-    rows = []
-
-    for item in results:
-
-        # Scenario 1 format:
-        #   fold_idx, test_idx, y_pred, y_true
-        # Scenario 2 & 3 format:
-        #   fold_idx, attack_id, test_idx, y_pred, y_true
-
-        if scenario_id == 1:
-            fold_idx, test_idx, y_pred, y_true = item
-            attack_id = None
-        else:
-            fold_idx, attack_id, test_idx, y_pred, y_true = item
-
-        # save predictions
-        out_file = f"{model_dir}/Predictions_Fold{fold_idx+1}.csv"
-        pd.DataFrame({
-            "predicted_label": y_pred,
-            "Attack": y_true
-        }).to_csv(out_file, index=False)
-
-        # compute metrics
-        tp = ((y_pred == 1) & (y_true == 1)).sum()
-        fp = ((y_pred == 1) & (y_true == 0)).sum()
-        fn = ((y_pred == 0) & (y_true == 1)).sum()
-
-        precision = tp / (tp + fp + 1e-9)
-        recall    = tp / (tp + fn + 1e-9)
-
-        rows.append({
-            "fold": fold_idx + 1,
-            "attack_id": attack_id,
-            "precision": precision,
-            "recall": recall,
-            "runtime_sec": runtime,
-            "memory_bytes": mem_used,
-        })
-
-        print(f"  Fold {fold_idx+1}: precision={precision:.4f}, recall={recall:.4f}")
-
-    pd.DataFrame(rows).to_csv(f"{model_dir}/metrics_summary.csv", index=False)
-    print(f"[{model_name}] runtime={runtime:.2f}s | memory={mem_used/1e6:.2f} MB")
+    result = func(*args, **kwargs)
+    dt = time.time() - t0
+    mem_after = process.memory_info().rss
+    dmem = mem_after - mem_before
+    return result, dt, dmem
 
 
-# -------------------------------------------------------------------
-# MAIN
-# -------------------------------------------------------------------
-def main():
+# ---------------------------------------------------------
+# Train VAE + extract FULL latent matrix (Option A Fix)
+# ---------------------------------------------------------
+def train_and_extract(
+        X, y, train_idx, test_idx,
+        mode="reconstruction",
+        latent_dim=8,
+        activation="relu",
+        layer_type="dense",
+        epochs=10,
+        device="cpu"
+):
+    X_train = X[train_idx]
 
-    parser = argparse.ArgumentParser(description="Task 2 – ML, CNN, Ensemble on VAE latent features")
-    parser.add_argument("-sc", "--scenario", required=True, type=int, choices=[1,2,3])
-    parser.add_argument("--latent-file", required=True, help="Path to VAE latent features (.npy)")
-    parser.add_argument("-k", "--folds", type=int, default=5)
+    # Build VAE
+    model = VAE(
+        input_dim=X.shape[1],
+        latent_dim=latent_dim,
+        activation=activation,
+        layer_type=layer_type,
+        num_classes=None if mode == "reconstruction" else 2
+    )
+
+    # ---------------- TRAIN VAE ----------------
+    if mode == "reconstruction":
+        train_loader = DataLoader(
+            TensorDataset(torch.from_numpy(X_train).float()),
+            batch_size=128,
+            shuffle=True
+        )
+        train_vae_reconstruction(model, train_loader, None,
+                                 device=device, epochs=epochs)
+
+    else:
+        train_loader = DataLoader(
+            TensorDataset(
+                torch.from_numpy(X_train).float(),
+                torch.from_numpy(y[train_idx]).long()
+            ),
+            batch_size=128,
+            shuffle=True
+        )
+        train_vae_classification(model, train_loader, None,
+                                 device=device, epochs=epochs)
+
+    # ------------- FULL LATENT EXTRACTION -------------
+    Z_full, t_full, m_full, _ = extract_latent_features(model, X, device=device)
+
+    # Slices for CNN only
+    Z_train = Z_full[train_idx]
+    Z_test = Z_full[test_idx]
+
+    return Z_full, Z_train, Z_test, t_full, m_full
+
+
+# ---------------------------------------------------------
+# MAIN PIPELINE
+# ---------------------------------------------------------
+def run_all_experiments(train_csv, test_csv, out_dir, scenario):
+
+    print("\n=== LOADING DATA ===")
+    X, y = load_data([train_csv], [test_csv])
+    y_series = pd.Series(y)
+
+    # 🔥 IMPORTANT FIX – normalize ICS data
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    os.makedirs(out_dir, exist_ok=True)
+    results = []
+
+    # ============================================================
+    # SCENARIO 1 — One-Class Models
+    # ============================================================
+    if scenario in ["1", "all"]:
+        print("\n================ SCENARIO 1 ================")
+
+        for fold_idx, train_idx, test_idx in scenario_1_split(X, y_series):
+
+            print(f"\n--- Scenario 1 | Fold {fold_idx+1} ---")
+
+            Z_full, Z_train, Z_test, fe_time, fe_mem = train_and_extract(
+                X, y, train_idx, test_idx, mode="reconstruction"
+            )
+
+            Z_full_df = pd.DataFrame(Z_full)
+
+            fake_scn = lambda X_, Y_, k=None: [(fold_idx, train_idx, test_idx)]
+
+            for name, func in [
+                ("OCSVM", run_OneClassSVM),
+                ("LOF", run_LOF),
+                ("EllipticEnvelope", run_EllipticEnvelope)
+            ]:
+
+                ml_res, ml_time, ml_mem = measure(
+                    func, Z_full_df, y_series, 1, fake_scn
+                )
+
+                (_, test_ids, y_pred, y_true, *_rest) = ml_res[0]
+
+                results.append({
+                    "scenario": 1,
+                    "fold": fold_idx,
+                    "classifier": name,
+                    "precision": precision_score(y_true, y_pred, zero_division=0),
+                    "recall": recall_score(y_true, y_pred, zero_division=0),
+                    "feature_time": fe_time,
+                    "feature_mem": fe_mem,
+                    "ml_time": ml_time,
+                    "ml_mem": ml_mem
+                })
+
+    # ============================================================
+    # SCENARIO 2 — Binary ML + CNN + Ensembles
+    # ============================================================
+    if scenario in ["2", "all"]:
+        print("\n================ SCENARIO 2 ================")
+
+        for fold_idx, attack_id, train_idx, test_idx in scenario_2_split(X, y_series):
+
+            print(f"\n--- Scenario 2 | Fold {fold_idx+1} Attack {attack_id} ---")
+
+            Z_full, Z_train, Z_test, fe_time, fe_mem = train_and_extract(
+                X, y, train_idx, test_idx, mode="classification"
+            )
+
+            Z_full_df = pd.DataFrame(Z_full)
+
+            fake_scn = lambda X_, Y_, k=None: [(fold_idx, attack_id, train_idx, test_idx)]
+
+            # ---------- ML MODELS ----------
+            svm_res, svm_t, svm_m = measure(run_binary_svm, Z_full_df, y_series, 1, fake_scn)
+            knn_res, knn_t, knn_m = measure(run_knn,        Z_full_df, y_series, 1, fake_scn)
+            rf_res,  rf_t,  rf_m  = measure(run_random_forest, Z_full_df, y_series, 1, fake_scn)
+
+            (_, _, _, svm_pred, y_test, *_r) = svm_res[0]
+            (_, _, _, knn_pred, _ , *_r)     = knn_res[0]
+            (_, _, _, rf_pred,  _ , *_r)     = rf_res[0]
+
+            # Save ML results
+            for name, pred, t, m in [
+                ("SVM", svm_pred, svm_t, svm_m),
+                ("KNN", knn_pred, knn_t, knn_m),
+                ("RF",  rf_pred,  rf_t, rf_m)
+            ]:
+                results.append({
+                    "scenario": 2,
+                    "fold": fold_idx,
+                    "classifier": name,
+                    "precision": precision_score(y_test, pred, zero_division=0),
+                    "recall":    recall_score(y_test, pred, zero_division=0),
+                    "feature_time": fe_time,
+                    "feature_mem": fe_mem,
+                    "ml_time": t,
+                    "ml_mem": m
+                })
+
+            # ---------- ENSEMBLES ----------
+            preds = [svm_pred, knn_pred, rf_pred]
+
+            for cname, method in [
+                ("Ensemble_Majority", "majority"),
+                ("Ensemble_All", "all"),
+                ("Ensemble_Random", "random")
+            ]:
+                ens_pred = ensemble(preds, method)
+
+                results.append({
+                    "scenario": 2,
+                    "fold": fold_idx,
+                    "classifier": cname,
+                    "precision": precision_score(y_test, ens_pred, zero_division=0),
+                    "recall":    recall_score(y_test, ens_pred, zero_division=0),
+                    "feature_time": fe_time,
+                    "feature_mem": fe_mem,
+                    "ml_time": svm_t + knn_t + rf_t,
+                    "ml_mem": svm_m + knn_m + rf_m
+                })
+
+            # ---------- CNN ----------
+            cnn_res, cnn_t, cnn_m = measure(
+                run_cnn_latent,
+                Z_train, y[train_idx],
+                Z_test,  y[test_idx],
+                32, 1, 10,
+                f"{out_dir}/scenario2_cnn_fold{fold_idx+1}.csv"
+            )
+
+            if cnn_res:
+                results.append({
+                    "scenario": 2,
+                    "fold": fold_idx,
+                    "classifier": "CNN",
+                    "precision": cnn_res["precision"],
+                    "recall":    cnn_res["recall"],
+                    "feature_time": fe_time,
+                    "feature_mem": fe_mem,
+                    "ml_time": cnn_t,
+                    "ml_mem": cnn_m
+                })
+
+    # ============================================================
+    # SCENARIO 3 — Same as Scenario 2
+    # ============================================================
+    if scenario in ["3", "all"]:
+        print("\n================ SCENARIO 3 ================")
+
+        for fold_idx, attack_type, train_idx, test_idx in scenario_3_split(X, y_series):
+
+            print(f"\n--- Scenario 3 | Fold {fold_idx+1} Type {attack_type} ---")
+
+            Z_full, Z_train, Z_test, fe_time, fe_mem = train_and_extract(
+                X, y, train_idx, test_idx, mode="classification"
+            )
+
+            Z_full_df = pd.DataFrame(Z_full)
+
+            fake_scn = lambda X_, Y_, k=None: [(fold_idx, attack_type, train_idx, test_idx)]
+
+            # ML models
+            svm_res, svm_t, svm_m = measure(run_binary_svm, Z_full_df, y_series, 1, fake_scn)
+            knn_res, knn_t, knn_m = measure(run_knn,        Z_full_df, y_series, 1, fake_scn)
+            rf_res,  rf_t,  rf_m  = measure(run_random_forest, Z_full_df, y_series, 1, fake_scn)
+
+            (_, _, _, svm_pred, y_test, *_r) = svm_res[0]
+            (_, _, _, knn_pred, _ , *_r)     = knn_res[0]
+            (_, _, _, rf_pred,  _ , *_r)     = rf_res[0]
+
+            # Save ML results
+            for name, pred, t, m in [
+                ("SVM", svm_pred, svm_t, svm_m),
+                ("KNN", knn_pred, knn_t, knn_m),
+                ("RF",  rf_pred,  rf_t, rf_m)
+            ]:
+                results.append({
+                    "scenario": 3,
+                    "fold": fold_idx,
+                    "classifier": name,
+                    "precision": precision_score(y_test, pred, zero_division=0),
+                    "recall":    recall_score(y_test, pred, zero_division=0),
+                    "feature_time": fe_time,
+                    "feature_mem": fe_mem,
+                    "ml_time": t,
+                    "ml_mem": m
+                })
+
+            # Ensembles
+            preds = [svm_pred, knn_pred, rf_pred]
+
+            for cname, method in [
+                ("Ensemble_Majority", "majority"),
+                ("Ensemble_All", "all"),
+                ("Ensemble_Random", "random")
+            ]:
+                ens_pred = ensemble(preds, method)
+
+                results.append({
+                    "scenario": 3,
+                    "fold": fold_idx,
+                    "classifier": cname,
+                    "precision": precision_score(y_test, ens_pred, zero_division=0),
+                    "recall": recall_score(y_test, ens_pred, zero_division=0),
+                    "feature_time": fe_time,
+                    "feature_mem": fe_mem,
+                    "ml_time": svm_t + knn_t + rf_t,
+                    "ml_mem": svm_m + knn_m + rf_m
+                })
+
+            # CNN
+            cnn_res, cnn_t, cnn_m = measure(
+                run_cnn_latent,
+                Z_train, y[train_idx],
+                Z_test,  y[test_idx],
+                32, 1, 10,
+                f"{out_dir}/scenario3_cnn_fold{fold_idx+1}.csv"
+            )
+
+            if cnn_res:
+                results.append({
+                    "scenario": 3,
+                    "fold": fold_idx,
+                    "classifier": "CNN",
+                    "precision": cnn_res["precision"],
+                    "recall":    cnn_res["recall"],
+                    "feature_time": fe_time,
+                    "feature_mem": fe_mem,
+                    "ml_time": cnn_t,
+                    "ml_mem": cnn_m
+                })
+
+    # ---------------------------------------------------------
+    # SAVE RESULTS
+    # ---------------------------------------------------------
+    df = pd.DataFrame(results)
+    df.to_csv(f"{out_dir}/task2_results.csv", index=False)
+    print("\n=== ALL RESULTS SAVED ===")
+
+
+# ---------------------------------------------------------
+# ENTRY POINT
+# ---------------------------------------------------------
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scenario", type=str, default="all",
+                        choices=["1", "2", "3", "all"])
+    parser.add_argument("--train", type=str, default="../../datasets/hai-22.04/train1.csv")
+    parser.add_argument("--test",  type=str, default="../../datasets/hai-22.04/test1.csv")
+    parser.add_argument("--out",   type=str, default="exports/task2")
+
     args = parser.parse_args()
 
-    sc = args.scenario
-    latent_path = args.latent_file
-    k = args.folds
-
-    print("\n=== Loading Raw Data (labels only) ===")
-
-    X_raw, y = load_data(
-        ["../../datasets/hai-22.04/train1.csv"],
-        ["../../datasets/hai-22.04/test1.csv"]
-    )
-    y_series = pd.Series(y).astype(int)
-
-    print("=== Loading Latent Features ===")
-    Z = np.load(latent_path)
-    if Z.shape[0] != len(y_series):
-        raise ValueError("Latent rows do not match Y labels!")
-
-    X_df = pd.DataFrame(Z)
-
-    # ---------------------------------------------------
-    # Select scenario
-    # ---------------------------------------------------
-    if sc == 1:
-        scenario_fn = scenario_1_split
-        models = {
-            "OCSVM": run_OneClassSVM,
-            "LOF": run_LOF,
-            "EllipticEnvelope": run_EllipticEnvelope,
-        }
-
-    elif sc == 2:
-        scenario_fn = scenario_2_split
-        models = {
-            "SVM": run_binary_svm,
-            "kNN": run_knn,
-            "RandomForest": run_random_forest,
-        }
-
-    else:
-        scenario_fn = scenario_3_split
-        models = {
-            "SVM": run_binary_svm,
-            "kNN": run_knn,
-            "RandomForest": run_random_forest,
-        }
-
-    out_base = f"exports/Scenario{sc}"
-
-    # ---------------------------------------------------
-    # Run ML models
-    # ---------------------------------------------------
-    for name, fn in models.items():
-        run_and_save(name, fn, X_df, y_series, scenario_fn, k, sc, out_base)
-
-    # ---------------------------------------------------
-    # Run CNN for Scenario 2 & 3 only
-    # ---------------------------------------------------
-    if sc in [2,3]:
-        print("\n[+] Running CNN (6-block architecture) on latent features...")
-        cnn_dir = f"{out_base}/CNN"
-        os.makedirs(cnn_dir, exist_ok=True)
-        run_cnn_latent(Z, y_series.values, scenario_fn, k, cnn_dir)
-
-    # ---------------------------------------------------
-    # Ensemble stage
-    # ---------------------------------------------------
-    print("\n[+] Running Ensemble...")
-
-    if sc == 1:
-        model_list = ["OCSVM", "LOF", "EllipticEnvelope"]
-    else:
-        model_list = ["RandomForest", "kNN", "SVM"]
-
-    ensemble_dir = f"{out_base}/Ensemble"
-    os.makedirs(ensemble_dir, exist_ok=True)
-
-    for fold in range(1, k+1):
-
-        preds_list = []
-        true_y = None
-
-        for m in model_list:
-            p, y_true = load_pred(f"{out_base}/{m}/Predictions_Fold{fold}.csv")
-            preds_list.append(p)
-            true_y = y_true
-
-        # 3 ensemble methods required
-        for method in ["random", "majority", "all"]:
-            final = ensemble(preds_list, method)
-            out_file = f"{ensemble_dir}/Ensemble_{method}_Fold{fold}.csv"
-
-            pd.DataFrame({
-                "predicted_label": final,
-                "Attack": true_y
-            }).to_csv(out_file, index=False)
-
-            print(f"[Ensemble] Fold {fold} | Method={method} saved.")
-
-
-if __name__ == "__main__":
-    main()
+    run_all_experiments(args.train, args.test, args.out, args.scenario)

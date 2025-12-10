@@ -13,12 +13,7 @@ Features:
     * reconstruction: VAE with reconstruction + KLD
     * classification: latent -> class logits (cross-entropy)
 - Hyperparameter search over basic VAE configs
-- Saves latent features to .npy files per model & fold
-
-You must:
-- Provide X_train, X_val, X_test (and y_* for classification)
-- Provide scenario & fold logic from Tasksheet 2
-"""
+- Saves latent features to .npy files per model"""
 
 import argparse
 from glob import glob
@@ -31,7 +26,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
-from utils import load_data
+from utils import load_data, create_windows_for_vae
 
 # ---------------------------------------------------------------------
 # Utility functions
@@ -80,7 +75,7 @@ class DenseEncoder(nn.Module):
 
     def forward(self, x):
         """
-        x: [batch, input_dim]
+        x: [batch, input_dim] = [batch, M*F]
         """
         h = self.backbone(x) # h is final hidden representation after passing through all hidden layers
         mu = self.fc_mu(h) # h passed through fc_mu layer to get mean of latent distribution
@@ -107,7 +102,7 @@ class DenseDecoderRecon(nn.Module):
     def forward(self, z):
         """
         z: [batch, latent_dim]
-        returns reconstruction [batch, input_dim]
+        returns reconstruction [batch, input_dim] (= flattened M*F)
         """
         return self.backbone(z)
 
@@ -125,47 +120,44 @@ class DenseDecoderClass(nn.Module):
         )
 
     def forward(self, z):
-        """
-        z: [batch, latent_dim]
-        returns logits [batch, num_classes]
-        """
         return self.net(z)
 
 
 # ---------------------------------------------------------------------
-# Conv1D encoder/decoder
+# Conv1D encoder/decoder (sequence-aware)
 # ---------------------------------------------------------------------
 
 class Conv1dEncoder(nn.Module):
     """
-    Input shape: [batch, seq_len] (flattened)
-    We reshape to [batch, 1, seq_len] and use Conv1d.
+    Input shape: [batch, seq_len, feature_dim] = [batch, M, F]
+    We reinterpret it as [batch, F, M] for Conv1d (channels=F, seq_len=M).
     """
-    def __init__(self, input_dim: int, latent_dim: int,
+    def __init__(self, seq_len: int, feature_dim: int, latent_dim: int,
                  activation: str):
         super().__init__()
         act_layer = get_activation(activation)
 
-        self.input_dim = input_dim
+        self.seq_len = seq_len
+        self.feature_dim = feature_dim
 
         self.conv = nn.Sequential(
-            nn.Conv1d(1, 16, kernel_size=3, padding=1),
-            act_layer,
-            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.Conv1d(feature_dim, 32, kernel_size=3, padding=1),
             act_layer,
             nn.Conv1d(32, 64, kernel_size=3, padding=1),
             act_layer,
         )
-        # After Conv: [batch, 64, input_dim]
+        # After Conv: [batch, 64, seq_len]
         self.flatten = nn.Flatten()
-        self.fc_mu = nn.Linear(64 * input_dim, latent_dim)
-        self.fc_logvar = nn.Linear(64 * input_dim, latent_dim)
+        self.fc_mu = nn.Linear(64 * seq_len, latent_dim)
+        self.fc_logvar = nn.Linear(64 * seq_len, latent_dim)
 
     def forward(self, x):
-        # x: [batch, input_dim]
-        x = x.unsqueeze(1)              # [batch, 1, input_dim]
-        h = self.conv(x)                # [batch, 64, input_dim]
-        h = self.flatten(h)             # [batch, 64 * input_dim]
+        """
+        x: [batch, seq_len, feature_dim] = [batch, M, F]
+        """
+        x = x.permute(0, 2, 1)            # [batch, F, M]
+        h = self.conv(x)                  # [batch, 64, M]
+        h = self.flatten(h)               # [batch, 64*M]
         mu = self.fc_mu(h)
         logvar = self.fc_logvar(h)
         return mu, logvar
@@ -174,28 +166,29 @@ class Conv1dEncoder(nn.Module):
 class Conv1dDecoderRecon(nn.Module):
     """
     Mirror Conv1dEncoder:
-    z -> FC -> [batch, 64, input_dim] -> ConvTranspose1d stacks -> [batch, 1, input_dim]
+    z -> FC -> [batch, 64, seq_len] -> Conv1d -> [batch, F, seq_len] -> permute back to [batch, seq_len, F].
     """
-    def __init__(self, input_dim: int, latent_dim: int, activation: str):
+    def __init__(self, seq_len: int, feature_dim: int,
+                 latent_dim: int, activation: str):
         super().__init__()
         act_layer = get_activation(activation)
 
-        self.input_dim = input_dim
-        self.fc = nn.Linear(latent_dim, 64 * input_dim)
+        self.seq_len = seq_len
+        self.feature_dim = feature_dim
+
+        self.fc = nn.Linear(latent_dim, 64 * seq_len)
         self.deconv = nn.Sequential(
             nn.Conv1d(64, 32, kernel_size=3, padding=1),
             act_layer,
-            nn.Conv1d(32, 16, kernel_size=3, padding=1),
-            act_layer,
-            nn.Conv1d(16, 1, kernel_size=3, padding=1),
-            # no activation here; treat as regression
+            nn.Conv1d(32, feature_dim, kernel_size=3, padding=1),
+            # no activation; regression output
         )
 
     def forward(self, z):
-        h = self.fc(z)                       # [batch, 64 * input_dim]
-        h = h.view(-1, 64, self.input_dim)   # [batch, 64, input_dim]
-        x_rec = self.deconv(h)               # [batch, 1, input_dim]
-        x_rec = x_rec.squeeze(1)             # [batch, input_dim]
+        h = self.fc(z)                                # [batch, 64 * M]
+        h = h.view(-1, 64, self.seq_len)             # [batch, 64, M]
+        x_rec = self.deconv(h)                       # [batch, F, M]
+        x_rec = x_rec.permute(0, 2, 1)               # [batch, M, F]
         return x_rec
 
 
@@ -215,23 +208,24 @@ class Conv1dDecoderClass(nn.Module):
 
 
 # ---------------------------------------------------------------------
-# LSTM encoder/decoder
+# LSTM encoder/decoder (sequence-aware)
 # ---------------------------------------------------------------------
 
 class LSTMEncoder(nn.Module):
     """
-    We treat the input vector as a sequence of length input_dim with 1 feature.
+    Input: [batch, seq_len, feature_dim] = [batch, M, F]
+    We feed this directly into LSTM with input_size = F.
     """
-    def __init__(self, input_dim: int, latent_dim: int,
-                 hidden_size: int, activation: str):
+    def __init__(self, seq_len: int, feature_dim: int,
+                 latent_dim: int, hidden_size: int, activation: str):
         super().__init__()
-        # activation is used later in FC layers
-        self.input_dim = input_dim
+        self.seq_len = seq_len
+        self.feature_dim = feature_dim
         self.activation = get_activation(activation)
 
         # 3 stacked LSTM layers (>=3 hidden layers)
         self.lstm = nn.LSTM(
-            input_size=1,
+            input_size=feature_dim,
             hidden_size=hidden_size,
             num_layers=3,
             batch_first=True,
@@ -242,11 +236,11 @@ class LSTMEncoder(nn.Module):
         self.fc_logvar = nn.Linear(hidden_size, latent_dim)
 
     def forward(self, x):
-        # x: [batch, input_dim] -> [batch, seq_len, features=1]
-        x = x.unsqueeze(-1)
-        out, (h_n, c_n) = self.lstm(x)
-        # Use final hidden state: [num_layers, batch, hidden_size]
-        h_last = h_n[-1]  # [batch, hidden_size]
+        """
+        x: [batch, M, F]
+        """
+        out, (h_n, c_n) = self.lstm(x)     # h_n: [num_layers, batch, hidden_size]
+        h_last = h_n[-1]                   # [batch, hidden_size]
         h_last = self.activation(h_last)
         mu = self.fc_mu(h_last)
         logvar = self.fc_logvar(h_last)
@@ -256,12 +250,14 @@ class LSTMEncoder(nn.Module):
 class LSTMDecoderRecon(nn.Module):
     """
     Sequence decoder:
-    z -> FC -> [batch, hidden_size] -> repeat over time -> LSTM -> Dense -> sequence of length input_dim
+    z -> FC -> [batch, hidden_size]
+      -> repeat over time (M) -> LSTM -> FC_out -> [batch, M, F]
     """
-    def __init__(self, input_dim: int, latent_dim: int,
-                 hidden_size: int, activation: str):
+    def __init__(self, seq_len: int, feature_dim: int,
+                 latent_dim: int, hidden_size: int, activation: str):
         super().__init__()
-        self.input_dim = input_dim
+        self.seq_len = seq_len
+        self.feature_dim = feature_dim
         self.hidden_size = hidden_size
         self.activation = get_activation(activation)
 
@@ -273,15 +269,17 @@ class LSTMDecoderRecon(nn.Module):
             num_layers=3,
             batch_first=True
         )
-        self.fc_out = nn.Linear(hidden_size, 1)
+        self.fc_out = nn.Linear(hidden_size, feature_dim)
 
     def forward(self, z):
-        # z: [batch, latent_dim]
-        h0 = self.activation(self.fc_init(z))      # [batch, hidden_size]
-        # repeat over time dimension 'input_dim'
-        h_seq = h0.unsqueeze(1).repeat(1, self.input_dim, 1)  # [batch, seq_len, hidden_size]
-        out, _ = self.lstm(h_seq)                  # [batch, seq_len, hidden_size]
-        x_rec = self.fc_out(out).squeeze(-1)       # [batch, seq_len]
+        """
+        z: [batch, latent_dim]
+        returns: [batch, M, F]
+        """
+        h0 = self.activation(self.fc_init(z))             # [batch, hidden_size]
+        h_seq = h0.unsqueeze(1).repeat(1, self.seq_len, 1)  # [batch, M, hidden_size]
+        out, _ = self.lstm(h_seq)                         # [batch, M, hidden_size]
+        x_rec = self.fc_out(out)                          # [batch, M, F]
         return x_rec
 
 
@@ -308,9 +306,14 @@ class LSTMDecoderClass(nn.Module):
 class VAE(nn.Module):
     """
     Flexible VAE that wraps:
-    - one of: DenseEncoder, Conv1dEncoder, LSTMEncoder
+    - DenseEncoder / Conv1dEncoder / LSTMEncoder
     - reconstruction decoder
     - classification decoder (optional)
+
+    For Dense:
+      input: [batch, M*F]
+    For Conv1d / LSTM:
+      input: [batch, M, F]
     """
 
     def __init__(
@@ -320,19 +323,26 @@ class VAE(nn.Module):
         layer_type: str,
         activation: str,
         hidden_dims_dense: Tuple[int, ...] = (128, 64, 32),
-        conv_used: bool = True,
         lstm_hidden_size: int = 64,
         num_classes: Optional[int] = None,
+        seq_len: Optional[int] = None,
+        feature_dim: Optional[int] = None,
     ):
         super().__init__()
-        self.input_dim = input_dim
+        self.input_dim = input_dim        # used for dense
         self.latent_dim = latent_dim
         self.layer_type = layer_type.lower()
         self.activation_name = activation
         self.num_classes = num_classes
+        self.seq_len = seq_len
+        self.feature_dim = feature_dim
 
-        # Encoder / Decoders selection
+        if self.layer_type in ("conv1d", "lstm"):
+            if self.seq_len is None or self.feature_dim is None:
+                raise ValueError("seq_len and feature_dim must be provided for conv1d/lstm VAE.")
+
         if self.layer_type == "dense":
+            # input_dim == M * F (flattened)
             self.encoder = DenseEncoder(
                 input_dim=input_dim,
                 latent_dim=latent_dim,
@@ -357,12 +367,14 @@ class VAE(nn.Module):
 
         elif self.layer_type == "conv1d":
             self.encoder = Conv1dEncoder(
-                input_dim=input_dim,
+                seq_len=self.seq_len,
+                feature_dim=self.feature_dim,
                 latent_dim=latent_dim,
                 activation=activation,
             )
             self.decoder_recon = Conv1dDecoderRecon(
-                input_dim=input_dim,
+                seq_len=self.seq_len,
+                feature_dim=self.feature_dim,
                 latent_dim=latent_dim,
                 activation=activation,
             )
@@ -377,13 +389,15 @@ class VAE(nn.Module):
 
         elif self.layer_type == "lstm":
             self.encoder = LSTMEncoder(
-                input_dim=input_dim,
+                seq_len=self.seq_len,
+                feature_dim=self.feature_dim,
                 latent_dim=latent_dim,
                 hidden_size=lstm_hidden_size,
                 activation=activation,
             )
             self.decoder_recon = LSTMDecoderRecon(
-                input_dim=input_dim,
+                seq_len=self.seq_len,
+                feature_dim=self.feature_dim,
                 latent_dim=latent_dim,
                 hidden_size=lstm_hidden_size,
                 activation=activation,
@@ -420,7 +434,7 @@ class VAE(nn.Module):
 
     def forward(self, x, mode: str = "reconstruction"):
         mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar) # z is sampled latent vector
+        z = self.reparameterize(mu, logvar)
 
         if mode == "reconstruction":
             x_rec = self.decode_recon(z)
@@ -440,12 +454,9 @@ def vae_loss_reconstruction(x, x_rec, mu, logvar, recon_type: str = "mse"):
     """
     Reconstruction loss + KL divergence.
 
-    Tasksheet says:
-    - "The first decoder should be able to reconstruct the initial sets of physical readings
-       and the Kullback-Leibler divergence (KLD) should be used as a reconstruction error."
-    We use the standard VAE objective: reconstruction term + KLD.
-
-    recon_type: "mse" or "mae"
+    
+    - Dense: x, x_rec shape [batch, M*F]
+    - Conv1d/LSTM: x, x_rec shape [batch, M, F]
     """
     if recon_type == "mse":
         recon = F.mse_loss(x_rec, x, reduction="sum")
@@ -454,19 +465,12 @@ def vae_loss_reconstruction(x, x_rec, mu, logvar, recon_type: str = "mse"):
     else:
         raise ValueError(f"Unknown recon_type: {recon_type}")
 
-    # KL divergence: sum over latent dimensions
     kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
     loss = (recon + kld) / x.size(0)
     return loss
 
 
 def vae_loss_classification(logits, y_true):
-    """
-    Classification decoder:
-    - Tasksheet: "categorical cross-entropy should be optimized during VAE training."
-    - Here we do NOT add KLD, matching that wording.
-    """
     return F.cross_entropy(logits, y_true)
 
 
@@ -519,8 +523,10 @@ def train_vae_reconstruction(
 
         history["train_loss"].append(avg_train)
         history["val_loss"].append(avg_val)
-        print(f"[Recon] Epoch {epoch}/{epochs} - train: {avg_train:.4f}, val: {avg_val:.4f}" if avg_val is not None
-              else f"[Recon] Epoch {epoch}/{epochs} - train: {avg_train:.4f}")
+        if avg_val is not None:
+            print(f"[Recon] Epoch {epoch}/{epochs} - train: {avg_train:.4f}, val: {avg_val:.4f}")
+        else:
+            print(f"[Recon] Epoch {epoch}/{epochs} - train: {avg_train:.4f}")
 
     return {"best_val_loss": best_val_loss, "history": history}
 
@@ -570,8 +576,10 @@ def train_vae_classification(
 
         history["train_loss"].append(avg_train)
         history["val_loss"].append(avg_val)
-        print(f"[Class] Epoch {epoch}/{epochs} - train: {avg_train:.4f}, val: {avg_val:.4f}" if avg_val is not None
-              else f"[Class] Epoch {epoch}/{epochs} - train: {avg_train:.4f}")
+        if avg_val is not None:
+            print(f"[Class] Epoch {epoch}/{epochs} - train: {avg_train:.4f}, val: {avg_val:.4f}")
+        else:
+            print(f"[Class] Epoch {epoch}/{epochs} - train: {avg_train:.4f}")
 
     return {"best_val_loss": best_val_loss, "history": history}
 
@@ -584,9 +592,6 @@ def extract_latent_features(
 ):
     import psutil
     import time
-    # -------------------------
-    # Measure memory & time
-    # -------------------------
     process = psutil.Process()
     cpu_mem_before = process.memory_info().rss / 1024**2   # MB
 
@@ -595,9 +600,6 @@ def extract_latent_features(
 
     start_time = time.time()
 
-    # -------------------------
-    # Standard feature extraction
-    # -------------------------
     model.to(device)
     model.eval()
     X_tensor = torch.from_numpy(X).float()
@@ -609,24 +611,16 @@ def extract_latent_features(
             x_batch = x_batch.to(device)
             mu, logvar = model.encode(x_batch)
             z = model.reparameterize(mu, logvar)
-
-            # For debugging:
-            # print("latent batch shape:", z.shape)
-
             zs.append(z.cpu().numpy())
 
     Z = np.concatenate(zs, axis=0)
 
-    # -------------------------
-    # Time & memory after extraction
-    # -------------------------
     end_time = time.time()
     cpu_mem_after = process.memory_info().rss / 1024**2
 
     runtime = end_time - start_time
     cpu_mem_used = cpu_mem_after - cpu_mem_before
 
-    # GPU memory
     gpu_mem_used = None
     if device == "cuda":
         gpu_mem_used = torch.cuda.max_memory_allocated() / 1024**2
@@ -640,16 +634,27 @@ def extract_latent_features(
 
     return Z, runtime, cpu_mem_used, gpu_mem_used
 
+
 def reconstruct_physical_readings(model, X, device="cuda"):
+    """
+    Reconstruct the inputs X using the VAE in reconstruction mode.
+
+    NOTE: X must have the SAME SHAPE as used in training:
+      - Dense: [N, M*F]
+      - Conv1d/LSTM: [N, M, F]
+    """
+    model.to(device)
     model.eval()
     X_tensor = torch.from_numpy(X).float().to(device)
     with torch.no_grad():
         mu, logvar = model.encode(X_tensor)
         z = model.reparameterize(mu, logvar)
-        X_hat = model.decode(z)
+        X_hat = model.decode_recon(z)
     return X_hat.cpu().numpy()
+
+
 # ---------------------------------------------------------------------
-# Simple hyperparameter search for Task 1(c)
+# (Optional) Hyperparameter search – currently only makes sense for dense.
 # ---------------------------------------------------------------------
 
 def hyperparameter_search_vae_recon(
@@ -664,9 +669,10 @@ def hyperparameter_search_vae_recon(
     device: str,
 ) -> Dict:
     """
-    Very simple grid-search-style hyperparameter search:
-    loops over combinations of layer_type, activation, latent_dim
-    and returns the best config based on validation loss.
+    Simple grid search for reconstruction VAE.
+
+    NOTE: This implementation assumes flattened input (Dense).
+    For Conv1d/LSTM you'd need to adapt seq_len & feature_dim.
     """
     best_cfg = None
     best_val = float("inf")
@@ -683,6 +689,8 @@ def hyperparameter_search_vae_recon(
     )
 
     for lt in layer_types:
+        if lt != "dense":
+            continue  # keep it simple: search only dense here
         for act in activations:
             for ld in latent_dims:
                 print(f"\n[HP-Search] layer_type={lt}, activation={act}, latent_dim={ld}")
@@ -718,7 +726,7 @@ def hyperparameter_search_vae_recon(
 
 
 # ---------------------------------------------------------------------
-# CLI demo (you will hook this to your scenarios)
+# CLI demo (hook to Task 1)
 # ---------------------------------------------------------------------
 
 def main():
@@ -736,72 +744,84 @@ def main():
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--out-dir", type=str, default="vae_features")
     parser.add_argument("--hp-search", action="store_true")
+    parser.add_argument(
+        "--window-size", type=int, default=20,
+        help="M: number of consecutive physical readings per VAE input set."
+    )
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    ensure_dir(args.out_dir) 
+    ensure_dir(args.out_dir)
 
     # --------------------------------------------------------------
-    # LOAD REAL DATA (same for Task 1 and Task 2)
+    # LOAD REAL DATA
     # --------------------------------------------------------------
     train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
     test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
 
-    X, y = load_data(train_files, test_files)   # X: readings, y: attack labels
+    X, y = load_data(train_files, test_files)   # X: [T,F], y: [T]
     from sklearn.preprocessing import StandardScaler
 
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
-    input_dim = X.shape[1] # number of features
-    print(f"[INFO] Loaded dataset with {X.shape[0]} samples and {input_dim} features.")
+    T, F = X.shape
+    print(f"[INFO] Raw dataset: {T} timesteps, {F} features.")
 
     # --------------------------------------------------------------
-    # TASK 1 SPLIT — NO SCENARIOS
+    # CREATE WINDOWS (M×N sets of physical readings)
     # --------------------------------------------------------------
+    M = args.window_size
+
+    if args.mode == "reconstruction":
+        X_win, _ = create_windows_for_vae(X, y, M, mode="reconstruction")
+        y_win = None
+    else:
+        X_win, y_win = create_windows_for_vae(X, y, M, mode="classification")
+
+    print(f"[INFO] Windowed dataset: {X_win.shape[0]} windows, shape per window: {X_win.shape[1:]} (M={M}, F={F})")
 
     from sklearn.model_selection import train_test_split
 
-    if args.mode == "reconstruction":
-        # Train VAE on NORMAL data only
-        X_normal = X[y == 0]
-        X_train, X_val = train_test_split(
-            X_normal, test_size=0.2, random_state=42, shuffle=True
-        )
-        y_train = y_val = None
+    # Prepare data depending on layer type
+    if args.layer_type == "dense":
+        # Flatten windows: [N, M, F] -> [N, M*F]
+        X_flat = X_win.reshape(X_win.shape[0], -1)
+        dense_input_dim = X_flat.shape[1]   # = M * F
 
-    else:  # classification decoder
-        X_train, X_val, y_train, y_val = train_test_split(
-            X, y, test_size=0.2, random_state=42, shuffle=True
-        )
+        if args.mode == "reconstruction":
+            X_train, X_val = train_test_split(
+                X_flat, test_size=0.2, random_state=42, shuffle=True
+            )
+            y_train = y_val = None
+        else:
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_flat, y_win, test_size=0.2, random_state=42, shuffle=True
+            )
 
-    # --------------------------------------------------------------
-    # OPTIONAL: HYPERPARAMETER SEARCH
-    # --------------------------------------------------------------
-    # if args.hp_search and args.mode == "reconstruction":
-    #     best_cfg = hyperparameter_search_vae_recon(
-    #         X_train=X_train,
-    #         X_val=X_val,
-    #         input_dim=input_dim,
-    #         layer_types=["dense", "conv1d", "lstm"],
-    #         activations=["relu", "tanh", "leaky_relu"],
-    #         latent_dims=[4, 8, 16],
-    #         epochs=max(3, args.epochs // 2),
-    #         batch_size=args.batch_size,
-    #         device=device,
-    #     )
-    #     args.layer_type = best_cfg["layer_type"]
-    #     args.activation = best_cfg["activation"]
-    #     args.latent_dim = best_cfg["latent_dim"]
+    else:
+        # Conv1d / LSTM: keep windows as [N, M, F]
+        dense_input_dim = M * F   # not used for conv1d/lstm but required for VAE init
+        if args.mode == "reconstruction":
+            X_train, X_val = train_test_split(
+                X_win, test_size=0.2, random_state=42, shuffle=True
+            )
+            y_train = y_val = None
+        else:
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_win, y_win, test_size=0.2, random_state=42, shuffle=True
+            )
 
     # --------------------------------------------------------------
     # BUILD MODEL
     # --------------------------------------------------------------
     model = VAE(
-        input_dim=input_dim,
+        input_dim=dense_input_dim,
         latent_dim=args.latent_dim,
         layer_type=args.layer_type,
         activation=args.activation,
-        num_classes=None if args.mode == "reconstruction" else args.num_classes
+        num_classes=None if args.mode == "reconstruction" else args.num_classes,
+        seq_len=M,
+        feature_dim=F,
     )
 
     # Data loaders
@@ -849,17 +869,26 @@ def main():
         )
 
     # --------------------------------------------------------------
-    # EXTRACT FEATURES FOR THE FULL DATASET
+    # EXTRACT FEATURES FOR THE FULL WINDOWED DATASET
     # --------------------------------------------------------------
-    Z_full, runtime, cpu_mem_used, gpu_mem_used = extract_latent_features(model, X, device=device)
+    # Use the same representation as used for training:
+    if args.layer_type == "dense":
+        X_for_Z = X_win.reshape(X_win.shape[0], -1)
+    else:
+        X_for_Z = X_win  # [N, M, F]
+
+    Z_full, runtime, cpu_mem_used, gpu_mem_used = extract_latent_features(
+        model, X_for_Z, device=device
+    )
 
     # --------------------------------------------------------------
     # SAVE FEATURES (Task 1 output)
     # --------------------------------------------------------------
-    base_name = f"task1_{args.layer_type}_{args.activation}_ld{args.latent_dim}_{args.mode}"
+    base_name = f"task1_{args.layer_type}_{args.activation}_ld{args.latent_dim}_{args.mode}_M{M}"
     np.save(f"{args.out_dir}/{base_name}.npy", Z_full)
 
     print(f"[INFO] Saved Task 1 features to {args.out_dir}/{base_name}.npy")
+
 
 if __name__ == "__main__":
     main()
