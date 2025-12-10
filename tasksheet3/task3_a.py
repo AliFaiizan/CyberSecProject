@@ -22,7 +22,7 @@ def select_latent_file():
     return {
         1: os.path.join(vae_dir, recon[0]),
         2: os.path.join(vae_dir, cls[0]),
-        3: os.path.join(vae_dir, cls[0])
+        3: os.path.join(vae_dir, cls[0]),
     }
 
 
@@ -31,12 +31,9 @@ def select_latent_file():
 # ---------------------------------------------------------
 def plot_importance(importances, feature_names, title, out_file):
     idx = np.argsort(importances)[::-1]
-    sorted_imp = importances[idx]
-    sorted_names = feature_names[idx]
-
     plt.figure(figsize=(10, 5))
-    plt.bar(range(len(sorted_imp)), sorted_imp)
-    plt.xticks(range(len(sorted_imp)), sorted_names, rotation=90)
+    plt.bar(range(len(importances)), importances[idx])
+    plt.xticks(range(len(importances)), feature_names[idx], rotation=90)
     plt.title(title)
     plt.tight_layout()
     plt.savefig(out_file)
@@ -48,46 +45,45 @@ def plot_importance(importances, feature_names, title, out_file):
 # ---------------------------------------------------------
 def compute_importance(model, X_test, y_test, scenario):
 
-    # Built-in importance (RandomForest)
     if hasattr(model, "feature_importances_"):
         return model.feature_importances_
 
-    # Linear SVM
     if hasattr(model, "coef_"):
         return np.abs(model.coef_).flatten()
 
-    # Select scoring metric
     scoring = "accuracy" if scenario == 1 else "f1"
 
-    # Permutation importance
     perm = permutation_importance(
-        model,
-        X_test,
-        y_test,
-        scoring=scoring,
-        n_repeats=5,
-        random_state=42
+        model, X_test, y_test,
+        scoring=scoring, n_repeats=5, random_state=42
     )
     return perm.importances_mean
 
 
 # ---------------------------------------------------------
-# Main Task 3(a)
+# Task 3(a)
 # ---------------------------------------------------------
 def run_task3a(scenario):
+
+    # Load latent features
     latent_files = select_latent_file()
     Z = np.load(latent_files[scenario])
     feature_names = np.array([f"z{i}" for i in range(Z.shape[1])])
 
-    # Load ground-truth labels
+    # Load labels
     from utils import load_data
     _, y = load_data(
-        ["../../datasets/hai-22.04/train1.csv"],
-        ["../../datasets/hai-22.04/test1.csv"]
+        ["../datasets/hai-22.04/train1.csv"],
+        ["../datasets/hai-22.04/test1.csv"]
     )
     y = np.array(y)
 
-    # Select correct scenario split + models
+    # Trim labels exactly like Task 2
+    if len(y) != len(Z):
+        print(f"[INFO] Adjusting labels: Z={len(Z)}, y={len(y)} → trimming")
+        y = y[:len(Z)]
+
+    # Select scenario
     if scenario == 1:
         scenario_fn = scenario_1_split
         models = ["OCSVM", "LOF", "EllipticEnvelope"]
@@ -100,7 +96,7 @@ def run_task3a(scenario):
 
     print(f"[INFO] Running Scenario {scenario}")
 
-    # Iterate through folds
+    # Iterate folds
     for split in scenario_fn(pd.DataFrame(Z), pd.Series(y), k=5):
 
         if scenario == 1:
@@ -111,7 +107,9 @@ def run_task3a(scenario):
         X_test = Z[test_idx]
         y_test = y[test_idx]
 
+        # For each model
         for model_name in models:
+
             model_path = f"saved_models/Scenario{scenario}/{model_name}_Fold{fold_idx+1}.joblib"
 
             if not os.path.exists(model_path):
@@ -125,6 +123,7 @@ def run_task3a(scenario):
 
             out_file = f"{out_dir}/{model_name}_Fold{fold_idx+1}_importance.png"
             title = f"{model_name} Feature Importance (Fold {fold_idx+1})"
+
             plot_importance(importances, feature_names, title, out_file)
 
             print("[SAVED]", out_file)

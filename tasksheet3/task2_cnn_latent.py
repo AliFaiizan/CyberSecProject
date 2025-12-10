@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import time
 import psutil
@@ -5,161 +6,185 @@ import numpy as np
 import pandas as pd
 
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import (
-    Conv1D, BatchNormalization, Activation, Dropout,
-    Flatten, Dense, Input
-)
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import Conv1D, BatchNormalization, Activation, Dropout
+from tensorflow.keras.layers import Flatten, Dense, Input
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.utils import to_categorical
 
 from sklearn.preprocessing import StandardScaler
-from scenarios import scenario_2_split, scenario_3_split
 
 process = psutil.Process()
 
-
-# =====================================================================
-# Sliding window generation
-# =====================================================================
+# ============================================================
+# Sliding windows on LATENT FEATURES
+# ============================================================
 def create_windows(Z, y, M, stride=1):
     Xw, yw = [], []
     N = len(Z)
+
     for start in range(0, N - M + 1, stride):
         end = start + M
-        center = start + M // 2
         Xw.append(Z[start:end])
-        yw.append(y[center])
-    return np.array(Xw), np.array(yw)
+        label = 1 if np.any(y[start:end] == 1) else 0
+        yw.append(label)
 
+    return np.array(Xw), np.array(yw, dtype=int)
 
-# =====================================================================
-# CNN architecture
-# =====================================================================
-def build_cnn(input_shape, lr=1e-3, dropout_rate=0.3):
+# ============================================================
+# Normalize windows
+# ============================================================
+def normalize_windows(X_train, X_test):
+    scaler = StandardScaler()
+
+    Xtr = X_train.reshape(-1, X_train.shape[-1])
+    Xte = X_test.reshape(-1,  X_test.shape[-1])
+
+    Xtr = scaler.fit_transform(Xtr)
+    Xte = scaler.transform(Xte)
+
+    return (
+        Xtr.reshape(X_train.shape),
+        Xte.reshape(X_test.shape),
+    )
+
+# ============================================================
+# SAME CNN from TaskSheet 2
+# ============================================================
+def build_cnn(input_shape, dropout_rate=0.3, lr=1e-3):
     model = Sequential()
     model.add(Input(shape=input_shape))
 
-    for filters in [32, 32, 64, 64]:
-        for _ in range(2):
-            model.add(Conv1D(filters, kernel_size=3, padding="same"))
-            model.add(BatchNormalization())
-            model.add(Activation("relu"))
-            model.add(Dropout(dropout_rate))
+    model.add(Conv1D(32, 3, padding="same")); model.add(BatchNormalization())
+    model.add(Activation("relu")); model.add(Dropout(dropout_rate))
+
+    model.add(Conv1D(32, 3, padding="same")); model.add(BatchNormalization())
+    model.add(Activation("relu")); model.add(Dropout(dropout_rate))
+
+    model.add(Conv1D(64, 3, padding="same")); model.add(BatchNormalization())
+    model.add(Activation("relu")); model.add(Dropout(dropout_rate))
+
+    model.add(Conv1D(64, 3, padding="same")); model.add(BatchNormalization())
+    model.add(Activation("relu")); model.add(Dropout(dropout_rate))
 
     model.add(Flatten())
-    model.add(Dense(128, activation="relu"))
-    model.add(Dropout(dropout_rate))
-    model.add(Dense(64, activation="relu"))
-    model.add(Dropout(dropout_rate))
+    model.add(Dense(128, activation="relu")); model.add(Dropout(dropout_rate))
+    model.add(Dense(64, activation="relu")); model.add(Dropout(dropout_rate))
+
     model.add(Dense(2, activation="softmax"))
 
-    model.compile(optimizer=Adam(lr),
+    model.compile(optimizer=Adam(learning_rate=lr),
                   loss="categorical_crossentropy",
                   metrics=["accuracy"])
     return model
 
 
-# =====================================================================
-# Main CNN routine (NOW RETURNS test_idx)
-# =====================================================================
-def run_cnn_latent(Z, y, scenario_id, k, out_dir, M=20, epochs=5):
+# ============================================================
+# MAIN ENTRY FOR TASK 2 (NOW WITH FULL RUNTIME TRACKING)
+# ============================================================
+def run_cnn_latent(Z, y, scenario_id, k, out_dir, M=20):
 
-    os.makedirs(out_dir, exist_ok=True)
-
-    if scenario_id == 2:
-        scenario_fn = scenario_2_split
-    elif scenario_id == 3:
-        scenario_fn = scenario_3_split
-    else:
-        print("CNN disabled for Scenario 1.")
-        return []
+    from scenarios import scenario_2_split, scenario_3_split
+    scenario_fn = scenario_2_split if scenario_id == 2 else scenario_3_split
 
     results = []
 
-    for fold_idx, attack_id, train_idx, test_idx in scenario_fn(Z, pd.Series(y), k):
+    for res in scenario_fn(pd.DataFrame(Z), pd.Series(y)):
 
-        print(f"\n[CNN] Fold {fold_idx+1} (Attack {attack_id})")
+        fold_idx, attack_id, train_idx, test_idx = res
+        print(f"\n[CNN] Fold {fold_idx+1}   Attack={attack_id}")
 
-        Z_train, y_train = Z[train_idx], y[train_idx]
-        Z_test,  y_test  = Z[test_idx], y[test_idx]
+        start_total = time.time()
 
-        # -------------------------------
-        # Standard scaling
-        # -------------------------------
-        start = time.time()
-        mem_before = process.memory_info().rss
-
-        scaler = StandardScaler()
-        Z_train = scaler.fit_transform(Z_train)
-        Z_test  = scaler.transform(Z_test)
-
-        fe1_time = time.time() - start
-        fe1_mem  = process.memory_info().rss - mem_before
+        Z_train, Z_test = Z[train_idx], Z[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
 
         # -------------------------------
-        # Generate windows for train + test
+        # 1) Window creation
         # -------------------------------
-        start = time.time()
-        mem_before = process.memory_info().rss
-
+        t0 = time.time()
         X_train_w, y_train_w = create_windows(Z_train, y_train, M)
-        X_test_w,  y_test_w  = create_windows(Z_test,  y_test,  M)
-
-        fe2_time = time.time() - start
-        fe2_mem  = process.memory_info().rss - mem_before
+        X_test_w, y_test_w = create_windows(Z_test, y_test, M)
+        t_window = time.time() - t0
+        mem_window = process.memory_info().rss
 
         if len(X_train_w) == 0 or len(X_test_w) == 0:
-            print("Skipping fold due to empty windows.")
+            print("[CNN] Not enough windows — skipping fold.")
             continue
 
         # -------------------------------
-        # Convert labels to one-hot
+        # 2) Normalization
+        # -------------------------------
+        t0 = time.time()
+        X_train_w, X_test_w = normalize_windows(X_train_w, X_test_w)
+        t_norm = time.time() - t0
+        mem_norm = process.memory_info().rss
+
+        # -------------------------------
+        # 3) One-hot labels
         # -------------------------------
         y_train_cat = to_categorical(y_train_w, 2)
-        y_test_cat  = to_categorical(y_test_w, 2)
+        y_test_cat = to_categorical(y_test_w, 2)
 
         # -------------------------------
-        # Build and train CNN
+        # 4) Build + Train CNN
         # -------------------------------
         model = build_cnn((M, Z.shape[1]))
-        early = EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True)
 
-        start = time.time()
-        mem_before = process.memory_info().rss
-
+        t0 = time.time()
+        cb = [EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True)]
         model.fit(
             X_train_w, y_train_cat,
             validation_data=(X_test_w, y_test_cat),
-            epochs=epochs,
+            epochs=10,
             batch_size=128,
-            callbacks=[early],
-            verbose=1
+            verbose=1,
+            callbacks=cb
         )
-
-        clf_time = time.time() - start
-        clf_mem  = process.memory_info().rss - mem_before
-
-        # -------------------------------
-        # Save model + test windows
-        # -------------------------------
-        model.save(f"{out_dir}/CNN_Fold{fold_idx+1}.h5")
-        np.save(f"{out_dir}/X_test_windows_Fold{fold_idx+1}.npy", X_test_w)
-        np.save(f"{out_dir}/y_test_windows_Fold{fold_idx+1}.npy", y_test_w)
+        t_train = time.time() - t0
+        mem_train = process.memory_info().rss
 
         # -------------------------------
-        # RETURN test_idx SO TASK 2 CAN MAP WINDOWS → ROWS
+        # 5) Prediction runtime
         # -------------------------------
-        results.append((
-            fold_idx,
-            model,
-            X_test_w,
-            y_test_w,
-            fe1_time + fe2_time,
-            fe1_mem + fe2_mem,
-            clf_time,
-            clf_mem,
-            test_idx  
-        ))
+        t0 = time.time()
+        preds = np.argmax(model.predict(X_test_w, verbose=0), axis=1)
+        t_pred = time.time() - t0
+        mem_pred = process.memory_info().rss
+
+        # -------------------------------
+        # 6) Total runtime
+        # -------------------------------
+        total_runtime = time.time() - start_total
+        total_memory = process.memory_info().rss
+
+        # Save window-based predictions
+        pd.DataFrame({
+            "predicted_label": preds,
+            "Attack": y_test_w
+        }).to_csv(f"{out_dir}/Predictions_Fold{fold_idx+1}.csv", index=False)
+
+        # Return extended metrics to task2.py
+        results.append(
+            (
+                fold_idx,
+                model,
+                X_test_w,
+                y_test_w,
+                total_runtime,
+                total_memory,
+                test_idx,
+                {
+                    "window_time": t_window,
+                    "window_mem": mem_window,
+                    "norm_time": t_norm,
+                    "norm_mem": mem_norm,
+                    "train_time": t_train,
+                    "train_mem": mem_train,
+                    "pred_time": t_pred,
+                    "pred_mem": mem_pred,
+                }
+            )
+        )
 
     return results

@@ -17,7 +17,6 @@ from models import (
 )
 
 from task2_cnn_latent import run_cnn_latent
-from task2_ensemble import ensemble, load_pred
 
 process = psutil.Process()
 
@@ -69,6 +68,7 @@ def run_and_save(model_name, run_fn, X_df, y_series, scenario_fn, k, scenario_id
         else:
             fold_idx, attack_id, test_idx, y_pred, y_true, model, fe_rt, fe_mem, clf_rt, clf_mem = res
 
+        # Precision / Recall
         tp = ((y_pred == 1) & (y_true == 1)).sum()
         fp = ((y_pred == 1) & (y_true == 0)).sum()
         fn = ((y_pred == 0) & (y_true == 1)).sum()
@@ -76,6 +76,7 @@ def run_and_save(model_name, run_fn, X_df, y_series, scenario_fn, k, scenario_id
         precision = tp / (tp + fp + 1e-9)
         recall    = tp / (tp + fn + 1e-9)
 
+        # Save predictions
         pd.DataFrame({
             "predicted_label": y_pred,
             "Attack": y_true
@@ -112,24 +113,34 @@ def main():
 
     sc = args.scenario
     k = args.folds
+    M = 20  # CNN window size
 
+    # ---------------------------------------------------------
     # Load labels
+    # ---------------------------------------------------------
     print("Loading labels...")
-    X_raw, y = load_data(
-        ["../../datasets/hai-22.04/train1.csv"],
-        ["../../datasets/hai-22.04/test1.csv"]
+    _, y = load_data(
+        ["../datasets/hai-22.04/train1.csv"],
+        ["../datasets/hai-22.04/test1.csv"]
     )
     y_series = pd.Series(y).astype(int)
 
+    # ---------------------------------------------------------
     # Load latent features
+    # ---------------------------------------------------------
     print("Loading latent features...")
     Z = np.load(args.latent_file)
+
     if Z.shape[0] != len(y_series):
-        raise ValueError("Latent dimension mismatch")
+        print(f"[INFO] Latent rows = {Z.shape[0]}, Label rows = {len(y_series)}")
+        print("[INFO] Trimming labels to match latent features...")
+        y_series = y_series.iloc[:Z.shape[0]]
 
     X_df = pd.DataFrame(Z)
 
-    # Select models per scenario
+    # ---------------------------------------------------------
+    # Select models
+    # ---------------------------------------------------------
     if sc == 1:
         scenario_fn = scenario_1_split
         model_map = {
@@ -148,38 +159,43 @@ def main():
     out_base = f"exports/Scenario{sc}"
     os.makedirs(out_base, exist_ok=True)
 
-    # Run ML models
+    # ---------------------------------------------------------
+    # Train ML models
+    # ---------------------------------------------------------
     for name, fn in model_map.items():
         run_and_save(name, fn, X_df, y_series, scenario_fn, k, sc, out_base)
 
-    # =====================================================================
-    # CNN (Scenario 2 & 3)
-    # =====================================================================
+    # ---------------------------------------------------------
+    # CNN for Scenario 2 & 3
+    # ---------------------------------------------------------
     if sc in [2, 3]:
 
         cnn_dir = f"{out_base}/CNN"
         os.makedirs(cnn_dir, exist_ok=True)
 
-        cnn_res = run_cnn_latent(Z, y_series.values, sc, k, cnn_dir)
+        print("\n[CNN] Starting CNN training on latent features...")
 
-        rows = []
-        M = 20  # window size used in CNN
+        cnn_results = run_cnn_latent(Z, y_series.values, sc, k, cnn_dir, M=M)
 
-        for fold_idx, model, Xw, yw, fe_rt, fe_mem, clf_rt, clf_mem, test_idx in cnn_res:
+        metrics = []
 
+        for (fold_idx, model, Xw, yw, total_runtime, total_memory, test_idx, detail_dict) in cnn_results:
+
+            # CNN window-based predictions
             window_preds = np.argmax(model.predict(Xw, verbose=0), axis=1)
 
-            # Convert windows → rows for TEST SET ONLY
+            # Convert windows → rows
             N_test = len(test_idx)
             row_preds = map_windows_to_rows(window_preds, N_test, M)
-
             y_true = y_series.values[test_idx]
 
+            # Save predictions
             pd.DataFrame({
                 "predicted_label": row_preds,
                 "Attack": y_true
             }).to_csv(f"{cnn_dir}/Predictions_Fold{fold_idx+1}.csv", index=False)
 
+            # Compute metrics
             tp = ((row_preds == 1) & (y_true == 1)).sum()
             fp = ((row_preds == 1) & (y_true == 0)).sum()
             fn = ((row_preds == 0) & (y_true == 1)).sum()
@@ -187,68 +203,17 @@ def main():
             precision = tp / (tp + fp + 1e-9)
             recall    = tp / (tp + fn + 1e-9)
 
-            rows.append({
+            metrics.append({
                 "fold": fold_idx+1,
                 "precision": precision,
                 "recall": recall,
-                "feature_runtime_sec": fe_rt,
-                "feature_memory_bytes": fe_mem,
-                "runtime_sec": clf_rt,
-                "memory_bytes": clf_mem
+                "feature_runtime_sec": detail_dict["window_time"] + detail_dict["norm_time"],
+                "feature_memory_bytes": detail_dict["window_mem"],
+                "runtime_sec": total_runtime,
+                "memory_bytes": total_memory
             })
 
-        pd.DataFrame(rows).to_csv(f"{cnn_dir}/metrics_summary.csv", index=False)
-
-   # =====================================================================
-# Ensemble (all scenarios)
-# =====================================================================
-
-print("\nRunning Ensemble...")
-ensemble_dir = f"{out_base}/Ensemble"
-os.makedirs(ensemble_dir, exist_ok=True)
-
-METHODS = ["majority", "all", "random"]
-
-for fold_idx in range(k):
-
-    preds_list = []
-    model_names = []
-
-    # Scenario 1 → 3 models
-    if sc == 1:
-        model_list = ["OCSVM", "LOF", "EllipticEnvelope"]
-
-    # Scenario 2 & 3 → 4 models
-    else:
-        model_list = ["SVM", "kNN", "RandomForest", "CNN"]
-
-    # Load predictions for all models in this fold
-    for name in model_list:
-        path = f"{out_base}/{name}/Predictions_Fold{fold_idx+1}.csv"
-        pred, _ = load_pred(path)
-
-        # Ensure predictions are 0/1
-        pred = np.where(pred > 0, 1, 0)
-
-        preds_list.append(pred)
-        model_names.append(name)
-
-    y_true = y_series.values
-
-    # Run all ensemble methods
-    for method in METHODS:
-        y_ens = ensemble(preds_list, method)
-
-        pd.DataFrame({
-            "predicted_label": y_ens,
-            "Attack": y_true
-        }).to_csv(
-            f"{ensemble_dir}/Predictions_{method}_Fold{fold_idx+1}.csv",
-            index=False
-        )
-
-        print(f"[Ensemble] Fold {fold_idx+1} saved ({method})")
-
+        pd.DataFrame(metrics).to_csv(f"{cnn_dir}/metrics_summary.csv", index=False)
 
 
 if __name__ == "__main__":
