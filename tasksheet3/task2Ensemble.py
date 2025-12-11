@@ -61,7 +61,7 @@ def main():
     if scenario == 1:
         models = ["OCSVM", "LOF", "EllipticEnvelope"]
     else:
-        models = ["SVM", "kNN", "RandomForest", "CNN"]
+        models = ["SVM", "kNN", "RandomForest"]
 
     scenario_dir = f"{base}/Scenario{scenario}"
     ensemble_dir = f"{scenario_dir}/Ensemble"

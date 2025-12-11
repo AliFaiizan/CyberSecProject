@@ -1,2 +1,15 @@
 scikit
 tensorflow
+numpy
+pandas
+matplotlib
+seaborn
+joblib
+psutil
+matplotlib-venn
+upsetplot
+warnings
+torch
+shap
+lime
+
