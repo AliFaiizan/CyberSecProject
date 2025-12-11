@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
+from glob import glob
 import os
 import numpy as np
 import pandas as pd
 import joblib
+from utils import load_data
+import re
 from lime.lime_tabular import LimeTabularExplainer
 from tensorflow.keras.models import load_model
 
 from task2_cnn_latent import create_windows
-from scenarios_util import scenario_1_split, scenario_2_split, scenario_3_split
+from scenarios import scenario_1_split, scenario_2_split, scenario_3_split
 
 
 # ========================================================================
@@ -20,35 +23,18 @@ def make_cnn_predict_fn(model, M, latent_dim):
     return predict_fn
 
 
-# ========================================================================
-# Load labels EXACTLY like Task 2
-# ========================================================================
-def load_labels_for_task2():
-    print("[INFO] Loading labels from datasets (Task 2 method) ...")
-
-    df_train = pd.read_csv("../../datasets/hai-22.04/train1.csv")
-    df_test  = pd.read_csv("../../datasets/hai-22.04/test1.csv")
-
-    full = pd.concat([df_train, df_test], ignore_index=True)
-    labels = full["Attack"].values
-
-    print(f"[INFO] Loaded {len(labels)} labels (Attack).")
-    return labels
-
 
 # ========================================================================
 # Run LIME for ML or CNN classifier
 # ========================================================================
-def run_lime_for_model(model_name, model, X_train, X_test, fold, scenario, output_dir, predict_fn=None):
-    
+def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_fn=None, flatten=False):
+    if flatten:
+        X_train = X_train.reshape(len(X_train), -1)
+        X_test  = X_test.reshape(len(X_test), -1)
     os.makedirs(output_dir, exist_ok=True)
-
-    X_train_flat = X_train.reshape(len(X_train), -1)
-    X_test_flat  = X_test.reshape(len(X_test), -1)
-
     explainer = LimeTabularExplainer(
-        training_data=X_train_flat,
-        feature_names=[f"f{i}" for i in range(X_train_flat.shape[1])],
+        training_data=X_train,
+        feature_names=[f"f{i}" for i in range(X_train.shape[1])],
         class_names=["normal", "attack"],
         discretize_continuous=True
     )
@@ -69,48 +55,66 @@ def run_lime_for_model(model_name, model, X_train, X_test, fold, scenario, outpu
         else:
             raise RuntimeError(f"{model_name} has no probability or decision_function!")
 
-    # Pick 5 samples
-    indices = np.linspace(0, len(X_test_flat)-1, 5, dtype=int)
+    # Pick 3 samples
+    indices = np.linspace(0, len(X_test)-1, 3, dtype=int)
 
     for idx in indices:
         exp = explainer.explain_instance(
-            X_test_flat[idx],
+            X_test[idx],
             predict_fn,
             num_features=15
         )
 
-        out_file = f"{output_dir}/LIME_{model_name}_sample{idx}.html"
-        exp.save_to_file(out_file)
+         # Save as PNG
+        fig = exp.as_pyplot_figure()
+        out_file = f"{output_dir}/LIME_{model_name}_sample{idx}.png"
+        fig.savefig(out_file, dpi=150, bbox_inches='tight')
         print(f"[LIME] Saved → {out_file}")
 
 
 # ========================================================================
 # MAIN — Task 3(c)
 # ========================================================================
-def run_task3_c(scenario, latent_dim=8, M=20):
+def run_task3_c(scenario):
 
     print(f"\n=== RUNNING TASK 3(c) — LIME EXPLANATIONS (Scenario {scenario}) ===")
 
     # Load labels from dataset
-    y = load_labels_for_task2()
+    train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
+    test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
+    X, y = load_data(train_files, test_files)   # X: [T,F], y: [T]
 
     # Load latent features from Task 1
     if scenario == 1:
-        latent_path = "vae_features/task1_dense_relu_ld8_reconstruction.npy"
+        latent_path = "vae_features/task1_dense_relu_ld8_reconstruction_M20.npy"
     else:
-        latent_path = "vae_features/task1_dense_relu_ld8_classification.npy"
+        latent_path = "vae_features/task1_dense_relu_ld8_classification_M20.npy"
+
+    
+    match = re.search(r'ld(\d+).*_M(\d+)', latent_path)
+    if match:
+        latent_dim = int(match.group(1))
+        M = int(match.group(2))
+        print("latent_dim:", latent_dim)
+        print("M:", M)
+    else:
+        print("Could not extract latent_dim and M from path!")
 
     if not os.path.exists(latent_path):
         print("[FATAL] Missing latent file:", latent_path)
         return
 
     Z = np.load(latent_path)
+    # Trim labels exactly like Task 2
+    if len(y) != len(Z):
+        print(f"[INFO] Adjusting labels: Z={len(Z)}, y={len(y)} → trimming")
+        y = y[:len(Z)]
     print("[INFO] Loaded latent features:", Z.shape)
 
     # Choose split functions and model directories
     if scenario == 1:
         split_fn = scenario_1_split
-        model_dir = "saved_models/Scenario1"
+        model_dir = "saved_models/Scenario1" "exports/Scenario"
     elif scenario == 2:
         split_fn = scenario_2_split
         model_dir = "saved_models/Scenario2"
@@ -118,33 +122,16 @@ def run_task3_c(scenario, latent_dim=8, M=20):
         split_fn = scenario_3_split
         model_dir = "saved_models/Scenario3"
 
+    
+
     # Iterate folds — FIXED SCENARIO 1 UNPACKING
     if scenario == 1:
-        fold_iterator = (
-            (fold_idx, None, train_idx, test_idx)
-            for fold_idx, train_idx, test_idx in split_fn(Z, pd.Series(y), 5)
-        )
-    else:
-        fold_iterator = split_fn(Z, pd.Series(y), 5)
-
-    for fold_idx, attack_id, train_idx, test_idx in fold_iterator:
-
-        fold = fold_idx + 1
-        print(f"\n[ Fold {fold} ]")
-
-        # Extract latent vectors
-        Z_train, y_train = Z[train_idx], y[train_idx]
-        Z_test,  y_test  = Z[test_idx],  y[test_idx]
-
-        # Create windows (same for CNN & ML)
-        X_train_w, y_train_w = create_windows(Z_train, y_train, M)
-        X_test_w,  y_test_w  = create_windows(Z_test,  y_test,  M)
-
-        # ==============================
-        # SCENARIO 1 — OCSVM, LOF, EE
-        # ==============================
-        if scenario == 1:
-
+        for fold_idx, train_idx, test_idx in split_fn(Z, pd.Series(y), 2):
+            print(train_idx,test_idx)
+                # Extract latent vectors
+            Z_train, y_train = Z[train_idx], y[train_idx]
+            Z_test,  y_test  = Z[test_idx],  y[test_idx]
+            fold = fold_idx + 1
             models = {
                 "OCSVM": f"{model_dir}/OCSVM_Fold{fold}.joblib",
                 "LOF":   f"{model_dir}/LOF_Fold{fold}.joblib",
@@ -159,53 +146,54 @@ def run_task3_c(scenario, latent_dim=8, M=20):
                 model = joblib.load(path)
                 out_dir = f"Task3_Results/Scenario1/LIME/Fold{fold}/{name}"
 
-                run_lime_for_model(name, model, X_train_w, X_test_w, fold, scenario, out_dir)
+                run_lime_for_model(name, model, Z_train, Z_test, out_dir)
+    else:
+       for fold_idx, attack_id, train_idx, test_idx in split_fn(Z, pd.Series(y), 2):
+            fold = fold_idx + 1
+            Z_train, y_train = Z[train_idx], y[train_idx]
+            Z_test,  y_test  = Z[test_idx],  y[test_idx]
+            ml_models = {
+                "SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
+                "kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
+                "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib"
+            }
+            # ML MODELS
+            for name, path in ml_models.items():
 
-            continue  # Skip CNN for scenario 1
+                if not os.path.exists(path):
+                    print(f"[WARN] Missing ML model: {path}")
+                    continue
 
-        # ==============================
-        # SCENARIO 2 & 3 — ML + CNN
-        # ==============================
-        ml_models = {
-            "SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
-            "kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
-            "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib"
-        }
+                model = joblib.load(path)
+                out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/{name}"
 
-        # ML MODELS
-        for name, path in ml_models.items():
-
-            if not os.path.exists(path):
-                print(f"[WARN] Missing ML model: {path}")
+                run_lime_for_model(name, model, Z_train, Z_test, out_dir)
+            
+            # CNN MODEL
+            print(M, latent_dim)
+            cnn_path = f"exports/Scenario{scenario}/CNN/CNN_Fold{fold}.h5"
+            if not os.path.exists(cnn_path):
+                print(f"[WARN] Missing CNN model: {cnn_path}")
                 continue
 
-            model = joblib.load(path)
-            out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/{name}"
+            X_train_w, y_train_w = create_windows(Z_train, y_train, M)
+            X_test_w,  y_test_w  = create_windows(Z_test,  y_test,  M)  
 
-            run_lime_for_model(name, model, X_train_w, X_test_w, fold, scenario, out_dir)
+            cnn_model = load_model(cnn_path)
+            cnn_predict_fn = make_cnn_predict_fn(cnn_model, M, latent_dim)
 
-        # CNN MODEL
-        cnn_path = f"{model_dir}/CNN_Model_Fold{fold}.h5"
-        if not os.path.exists(cnn_path):
-            print(f"[WARN] Missing CNN model: {cnn_path}")
-            continue
+            out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/CNN"
 
-        cnn_model = load_model(cnn_path)
-        cnn_predict_fn = make_cnn_predict_fn(cnn_model, M, latent_dim)
-
-        out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/CNN"
-
-        run_lime_for_model(
-            "CNN",
-            cnn_model,
-            X_train_w,
-            X_test_w,
-            fold,
-            scenario,
-            out_dir,
-            predict_fn=cnn_predict_fn
-        )
-
+            run_lime_for_model(
+                "CNN",
+                cnn_model,
+                X_train_w,
+                X_test_w,
+                out_dir,
+                predict_fn=cnn_predict_fn,
+                flatten=True
+            )
+       
     print("\n=== TASK 3(c) COMPLETED ===")
 
 
@@ -221,4 +209,4 @@ if __name__ == "__main__":
     parser.add_argument("--M", type=int, default=20)
 
     args = parser.parse_args()
-    run_task3_c(args.scenario, args.latent_dim, args.M)
+    run_task3_c(args.scenario)
