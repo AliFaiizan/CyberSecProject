@@ -11,7 +11,7 @@ from tensorflow.keras.models import load_model
 
 from task2_cnn_latent import create_windows
 from scenarios import scenario_1_split, scenario_2_split, scenario_3_split
-
+from utils import create_windows_for_vae
 
 # ========================================================================
 # CNN reshape wrapper for LIME
@@ -84,11 +84,15 @@ def run_task3_c(scenario):
     test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
     X, y = load_data(train_files, test_files)   # X: [T,F], y: [T]
 
-    # Load latent features from Task 1
-    if scenario == 1:
-        latent_path = "vae_features/task1_dense_relu_ld8_reconstruction_M20.npy"
-    else:
-        latent_path = "vae_features/task1_dense_relu_ld8_classification_M20.npy"
+    _, y_window = create_windows_for_vae(
+        X,
+        y,
+        window_size=M,
+        mode="classification"  # Aggregates: label=1 if ANY row in window is attack
+    )
+    print(f"Generated window labels: {y_window.shape}")
+
+    latent_path = "vae_features/task1_dense_relu_ld8_classification_M20.npy"
 
     
     match = re.search(r'ld(\d+).*_M(\d+)', latent_path)
@@ -114,7 +118,7 @@ def run_task3_c(scenario):
     # Choose split functions and model directories
     if scenario == 1:
         split_fn = scenario_1_split
-        model_dir = "saved_models/Scenario1" "exports/Scenario"
+        model_dir = "saved_models/Scenario1"
     elif scenario == 2:
         split_fn = scenario_2_split
         model_dir = "saved_models/Scenario2"
@@ -126,7 +130,7 @@ def run_task3_c(scenario):
 
     # Iterate folds — FIXED SCENARIO 1 UNPACKING
     if scenario == 1:
-        for fold_idx, train_idx, test_idx in split_fn(Z, pd.Series(y), 2):
+        for fold_idx, train_idx, test_idx in split_fn(Z, pd.Series(y_window), 2):
             print(train_idx,test_idx)
                 # Extract latent vectors
             Z_train, y_train = Z[train_idx], y[train_idx]
@@ -148,7 +152,7 @@ def run_task3_c(scenario):
 
                 run_lime_for_model(name, model, Z_train, Z_test, out_dir)
     else:
-       for fold_idx, attack_id, train_idx, test_idx in split_fn(Z, pd.Series(y), 2):
+       for fold_idx, attack_id, train_idx, test_idx in split_fn(Z, pd.Series(y_window), 2):
             fold = fold_idx + 1
             Z_train, y_train = Z[train_idx], y[train_idx]
             Z_test,  y_test  = Z[test_idx],  y[test_idx]

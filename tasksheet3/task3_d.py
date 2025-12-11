@@ -152,10 +152,9 @@ def run_shap_for_model(
         print(f"[DEBUG CNN] SHAP values type: {type(shap_vals)}")
         print(f"[DEBUG CNN] SHAP values length/shape: {len(shap_vals) if isinstance(shap_vals, list) else shap_vals.shape}")
         
-        # DeepExplainer returns shape (samples, timesteps, features, classes) for CNN
-        # Select attack class (index 1) first, then flatten
+
         if isinstance(shap_vals, np.ndarray) and shap_vals.ndim == 4:
-            # Shape: (10, 20, 8, 2) -> select class 1 -> (10, 20, 8) -> flatten to (10, 160)
+            
             shap_values = shap_vals[:, :, :, 1].reshape(shap_vals.shape[0], -1)
         elif isinstance(shap_vals, list) and len(shap_vals) > 1:
             shap_values = shap_vals[1].reshape(shap_vals[1].shape[0], -1)
@@ -278,7 +277,7 @@ def run_task3_d(scenario):
         run_shap_for_model(name, model, Z_train, Z_test, out_dir)
 
     # CNN
-    cnn_path = f"{model_dir}/CNN_Fold{fold}.h5"
+    cnn_path = f"exports/Scenario{scenario}/CNN/CNN_Fold{fold}.h5"
     if os.path.exists(cnn_path):
         X_train_w, y_train_w = create_windows(Z_train, y_train, M)
         X_test_w,  y_test_w  = create_windows(Z_test,  y_test,  M)
