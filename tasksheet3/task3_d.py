@@ -101,10 +101,10 @@ def run_shap_for_model(
         print()
         if model_name == "kNN":
             explainer = shap.KernelExplainer(predict_fn, background, link="identity")
-            shap_values = explainer.shap_values(X_test_flat[:30], nsamples=500)  # More samples for kNN
+            shap_values = explainer.shap_values(X_test_flat, nsamples=500)  # More samples for kNN
         else:
             explainer = shap.KernelExplainer(predict_fn, background)
-            shap_values = explainer.shap_values(X_test_flat[:30])
+            shap_values = explainer.shap_values(X_test_flat)
         print(f"[DEBUG] SHAP values shape: {shap_values[0].shape if isinstance(shap_values, list) else shap_values.shape}")
         
         # For binary classification, select attack class (index 1)
@@ -128,7 +128,7 @@ def run_shap_for_model(
         background = shap.sample(X_train_flat, 50)
         print(f"[DEBUG OCSVM] Background shape: {background.shape}, X_train_flat: {X_train_flat.shape}")
         explainer  = shap.KernelExplainer(lambda x: anomaly_to_prob(model, x), background)
-        shap_values = explainer.shap_values(X_test_flat[:500])
+        shap_values = explainer.shap_values(X_test_flat)
         print(f"[DEBUG OCSVM] SHAP values shape: {shap_values[0].shape if isinstance(shap_values, list) else shap_values.shape}")
         
         # For binary classification, select attack class (index 1)
