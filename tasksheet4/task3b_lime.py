@@ -9,6 +9,9 @@ import re
 from lime.lime_tabular import LimeTabularExplainer
 from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
+import warnings
+
+warnings.filterwarnings('ignore')
 
 from task2_cnn_latent import create_windows
 from scenarios import scenario_1_split, scenario_2_split, scenario_3_split
@@ -119,17 +122,28 @@ def run_task3_c(scenario):
     print(f"\n=== RUNNING TASK 3(c) — LIME EXPLANATIONS (Scenario {scenario}) ===")
 
     # Load labels from dataset
-    train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
-    test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
-    X, y = load_data(train_files, test_files)   # X: [T,F], y: [T]
+    # train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
+    # test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
+    # X, y = load_data(train_files, test_files)   # X: [T,F], y: [T]
+    train_data = np.load("synthetic_train.npy")  # shape: [N_train, F]
+    test_data = np.load("synthetic_test.npy")    # shape: [N_test, F]
+    test_labels = np.load("synthetic_test_labels.npy")  # shape: [N_test,] or [N_test, 1]
 
-    _, y_window = create_windows_for_vae(
-        X,
-        y,
-        window_size=M,
-        mode="classification"  # Aggregates: label=1 if ANY row in window is attack
-    )
-    print(f"Generated window labels: {y_window.shape}")
+    # Ensure test_labels is a column vector
+    if test_labels.ndim == 1:
+        test_labels = test_labels[:, None]
+
+    # Add label column to train (all zeros)
+    train_labels = np.zeros((train_data.shape[0], 1))
+    train_data_with_label = np.hstack([train_data, train_labels])
+    test_data_with_label = np.hstack([test_data, test_labels])
+
+    # Combine
+    all_data = np.vstack([train_data_with_label, test_data_with_label])
+
+    # Now, features and labels:
+    X = all_data[:, :-1]  # all columns except last
+    y = all_data[:, -1]   # last column
 
     latent_path = "vae_features/task1_dense_relu_ld8_classification_M20.npy"
 
@@ -146,6 +160,14 @@ def run_task3_c(scenario):
     if not os.path.exists(latent_path):
         print("[FATAL] Missing latent file:", latent_path)
         return
+
+    _, y_window = create_windows_for_vae(
+        X,
+        y,
+        window_size=M,
+        mode="classification"  # Aggregates: label=1 if ANY row in window is attack
+    )
+    print(f"Generated window labels: {y_window.shape}")
 
     Z = np.load(latent_path)
     # Trim labels exactly like Task 2
@@ -165,62 +187,65 @@ def run_task3_c(scenario):
         split_fn = scenario_3_split
         model_dir = "saved_models/Scenario3"
 
+    # Get only FIRST fold
+    folds = list(split_fn(Z, pd.Series(y_window), 2))
     
-
-    # Iterate folds — FIXED SCENARIO 1 UNPACKING
     if scenario == 1:
-        for fold_idx, train_idx, test_idx in split_fn(Z, pd.Series(y_window), 2):
-            print(train_idx,test_idx)
-                # Extract latent vectors
-            Z_train, y_train = Z[train_idx], y[train_idx]
-            Z_test,  y_test  = Z[test_idx],  y[test_idx]
-            fold = fold_idx + 1
-            models = {
-                "OCSVM": f"{model_dir}/OCSVM_Fold{fold}.joblib",
-                "LOF":   f"{model_dir}/LOF_Fold{fold}.joblib",
-                "EE":    f"{model_dir}/EE_Fold{fold}.joblib"
-            }
-
-            for name, path in models.items():
-                if not os.path.exists(path):
-                    print(f"[WARN] Missing {name}: {path}")
-                    continue
-
-                model = joblib.load(path)
-                out_dir = f"Task3_Results/Scenario1/LIME/Fold{fold}/{name}"
-
-                run_lime_for_model(name, model, Z_train, Z_test, out_dir)
+        fold_idx, train_idx, test_idx = folds[0]
     else:
-       for fold_idx, attack_id, train_idx, test_idx in split_fn(Z, pd.Series(y_window), 2):
-            fold = fold_idx + 1
-            Z_train, y_train = Z[train_idx], y[train_idx]
-            Z_test,  y_test  = Z[test_idx],  y[test_idx]
-            ml_models = {
-                "SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
-                "kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
-                "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib"
-            }
-            # ML MODELS
-            for name, path in ml_models.items():
+        fold_idx, attack_id, train_idx, test_idx = folds[0]
 
-                if not os.path.exists(path):
-                    print(f"[WARN] Missing ML model: {path}")
-                    continue
+    fold = fold_idx + 1
+    Z_train, y_train = Z[train_idx], y_window[train_idx]
+    Z_test,  y_test  = Z[test_idx],  y_window[test_idx]
 
-                model = joblib.load(path)
-                out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/{name}"
+    # =====================================================
+    # SCENARIO 1 — One-class models
+    # =====================================================
+    if scenario == 1:
+        models = {
+            "OCSVM": f"{model_dir}/OCSVM_Fold{fold}.joblib",
+            "LOF":   f"{model_dir}/LOF_Fold{fold}.joblib",
+            "EllipticEnvelope":    f"{model_dir}/EllipticEnvelope_Fold{fold}.joblib"
+        }
 
-                run_lime_for_model(name, model, Z_train, Z_test, out_dir)
-            
-            # CNN MODEL
-            print(M, latent_dim)
-            cnn_path = f"exports/Scenario{scenario}/CNN/CNN_Fold{fold}.h5"
-            if not os.path.exists(cnn_path):
-                print(f"[WARN] Missing CNN model: {cnn_path}")
+        for name, path in models.items():
+            if not os.path.exists(path):
+                print(f"[WARN] Missing {name}: {path}")
                 continue
 
+            model = joblib.load(path)
+            out_dir = f"Task3_Results/Scenario1/LIME/Fold{fold}/{name}"
+            run_lime_for_model(name, model, Z_train, Z_test, out_dir)
+
+    # =====================================================
+    # SCENARIO 2 & 3 — ML models + CNN
+    # =====================================================
+    else:
+        ml_models = {
+            "SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
+            "kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
+            "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib"
+        }
+
+        # ML MODELS
+        for name, path in ml_models.items():
+            if not os.path.exists(path):
+                print(f"[WARN] Missing ML model: {path}")
+                continue
+
+            model = joblib.load(path)
+            out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/{name}"
+            run_lime_for_model(name, model, Z_train, Z_test, out_dir)
+
+        # CNN MODEL
+        print(f"[INFO] M={M}, latent_dim={latent_dim}")
+        cnn_path = f"exports/Scenario{scenario}/CNN/CNN_Fold{fold}.h5"
+        if not os.path.exists(cnn_path):
+            print(f"[WARN] Missing CNN model: {cnn_path}")
+        else:
             X_train_w, y_train_w = create_windows(Z_train, y_train, M)
-            X_test_w,  y_test_w  = create_windows(Z_test,  y_test,  M)  
+            X_test_w,  y_test_w  = create_windows(Z_test,  y_test,  M)
 
             cnn_model = load_model(cnn_path)
             cnn_predict_fn = make_cnn_predict_fn(cnn_model, M, latent_dim)

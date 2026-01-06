@@ -759,6 +759,7 @@ def main():
     # train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
     # test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
     # Load train and test data
+    # Loading synthetic data from GAN
     train_data = np.load("synthetic_train.npy")  # shape: [N_train, F]
     test_data = np.load("synthetic_test.npy")    # shape: [N_test, F]
     test_labels = np.load("synthetic_test_labels.npy")  # shape: [N_test,] or [N_test, 1]

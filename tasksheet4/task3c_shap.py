@@ -60,7 +60,7 @@ def run_shap_for_model(
     # -----------------------------------------------------
     if model_name == "RF":
         explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X_test_flat[:30])
+        shap_values = explainer.shap_values(X_test_flat)
         print(f"[DEBUG RF] SHAP values type: {type(shap_values)}")
         print(f"[DEBUG RF] SHAP values shape: {shap_values[0].shape if isinstance(shap_values, list) else shap_values.shape}")
         
@@ -101,10 +101,10 @@ def run_shap_for_model(
         print()
         if model_name == "kNN":
             explainer = shap.KernelExplainer(predict_fn, background, link="identity")
-            shap_values = explainer.shap_values(X_test_flat[:30], nsamples=500)  # More samples for kNN
+            shap_values = explainer.shap_values(X_test_flat, nsamples=500)  # More samples for kNN
         else:
             explainer = shap.KernelExplainer(predict_fn, background)
-            shap_values = explainer.shap_values(X_test_flat[:30])
+            shap_values = explainer.shap_values(X_test_flat)
         print(f"[DEBUG] SHAP values shape: {shap_values[0].shape if isinstance(shap_values, list) else shap_values.shape}")
         
         # For binary classification, select attack class (index 1)
@@ -128,7 +128,7 @@ def run_shap_for_model(
         background = shap.sample(X_train_flat, 50)
         print(f"[DEBUG OCSVM] Background shape: {background.shape}, X_train_flat: {X_train_flat.shape}")
         explainer  = shap.KernelExplainer(lambda x: anomaly_to_prob(model, x), background)
-        shap_values = explainer.shap_values(X_test_flat[:30])
+        shap_values = explainer.shap_values(X_test_flat)
         print(f"[DEBUG OCSVM] SHAP values shape: {shap_values[0].shape if isinstance(shap_values, list) else shap_values.shape}")
         
         # For binary classification, select attack class (index 1)
@@ -147,7 +147,7 @@ def run_shap_for_model(
         background = X_train_cnn[:20]
         explainer = shap.DeepExplainer(model, background)
 
-        shap_vals = explainer.shap_values(X_test_cnn[:10])
+        shap_vals = explainer.shap_values(X_test_cnn)
         
         print(f"[DEBUG CNN] SHAP values type: {type(shap_vals)}")
         print(f"[DEBUG CNN] SHAP values length/shape: {len(shap_vals) if isinstance(shap_vals, list) else shap_vals.shape}")
@@ -161,7 +161,7 @@ def run_shap_for_model(
         else:
             shap_values = shap_vals[0].reshape(shap_vals[0].shape[0], -1) if isinstance(shap_vals, list) else shap_vals.reshape(shap_vals.shape[0], -1)
         
-        X_test_flat = X_test_cnn[:10].reshape(X_test_cnn[:10].shape[0], -1)
+        X_test_flat = X_test_cnn.reshape(X_test_cnn.shape[0], -1)
         print(f"[DEBUG CNN] Final shapes - shap_values: {shap_values.shape}, X_test_flat: {X_test_flat.shape}")
 
     else:
@@ -192,10 +192,29 @@ def run_shap_for_model(
 def run_task3_d(scenario):
     print(f"\n=== RUNNING TASK 3(d) — SHAP EXPLANATIONS (Scenario {scenario}) ===")
 
-    # Load data
-    train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
-    test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
-    X, y = load_data(train_files, test_files)
+    # # Load data
+    # train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
+    # test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
+    # X, y = load_data(train_files, test_files)
+    train_data = np.load("synthetic_train.npy")  # shape: [N_train, F]
+    test_data = np.load("synthetic_test.npy")    # shape: [N_test, F]
+    test_labels = np.load("synthetic_test_labels.npy")  # shape: [N_test,] or [N_test, 1]
+
+    # Ensure test_labels is a column vector
+    if test_labels.ndim == 1:
+        test_labels = test_labels[:, None]
+
+    # Add label column to train (all zeros)
+    train_labels = np.zeros((train_data.shape[0], 1))
+    train_data_with_label = np.hstack([train_data, train_labels])
+    test_data_with_label = np.hstack([test_data, test_labels])
+
+    # Combine
+    all_data = np.vstack([train_data_with_label, test_data_with_label])
+
+    # Now, features and labels:
+    X = all_data[:, :-1]  # all columns except last
+    y = all_data[:, -1]   # last column
 
     # Load latent file
     if scenario == 1:
