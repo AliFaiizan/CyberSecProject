@@ -10,6 +10,8 @@ from lime.lime_tabular import LimeTabularExplainer
 from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
 import warnings
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+import multiprocessing as mp
 
 warnings.filterwarnings('ignore')
 
@@ -25,6 +27,64 @@ def make_cnn_predict_fn(model, M, latent_dim):
         x = x_flat.reshape((x_flat.shape[0], M, latent_dim))
         return model.predict(x)
     return predict_fn
+
+
+# ========================================================================
+# WORKER FUNCTION — Process one fold + model combination
+# ========================================================================
+def process_ml_model(args):
+    """
+    Worker function for ML models (OCSVM, LOF, EE, SVM, kNN, RF)
+    Returns: (scenario, fold, model_name, status)
+    """
+    scenario, fold, model_name, model_path, Z_train, Z_test = args
+    
+    try:
+        model = joblib.load(model_path)
+        
+        if scenario == 1:
+            out_dir = f"Task3_Results/Scenario1/LIME/Fold{fold}/{model_name}"
+        else:
+            out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/{model_name}"
+        
+        run_lime_for_model(model_name, model, Z_train, Z_test, out_dir)
+        return (scenario, fold, model_name, "SUCCESS")
+    except Exception as e:
+        print(f"[ERROR] Scenario {scenario}, Fold {fold}, {model_name}: {e}")
+        return (scenario, fold, model_name, f"FAILED: {str(e)}")
+
+
+def process_cnn_model(args):
+    """
+    Worker function for CNN models
+    """
+    scenario, fold, Z_train, y_train, Z_test, y_test, M, latent_dim, model_dir = args
+    
+    try:
+        cnn_path = f"exports/Scenario{scenario}/CNN/CNN_Fold{fold}.h5"
+        if not os.path.exists(cnn_path):
+            return (scenario, fold, "CNN", "SKIPPED (not found)")
+        
+        X_train_w, y_train_w = create_windows(Z_train, y_train, M)
+        X_test_w, y_test_w = create_windows(Z_test, y_test, M)
+        
+        cnn_model = load_model(cnn_path)
+        cnn_predict_fn = make_cnn_predict_fn(cnn_model, M, latent_dim)
+        
+        out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/CNN"
+        run_lime_for_model(
+            "CNN",
+            cnn_model,
+            X_train_w,
+            X_test_w,
+            out_dir,
+            predict_fn=cnn_predict_fn,
+            flatten=True
+        )
+        return (scenario, fold, "CNN", "SUCCESS")
+    except Exception as e:
+        print(f"[ERROR] Scenario {scenario}, Fold {fold}, CNN: {e}")
+        return (scenario, fold, "CNN", f"FAILED: {str(e)}")
 
 
 
@@ -65,7 +125,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
     
     print(f"[LIME] Running on {len(X_test)} samples for {model_name}...")
     
-    for idx in range(100):
+    for idx in range(len(X_test)):
         exp = explainer.explain_instance(
             X_test[idx],
             predict_fn,
@@ -126,7 +186,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
 
 
 # ========================================================================
-# MAIN — Task 3(c)
+# MAIN — Task 3(c) with PARALLEL EXECUTION
 # ========================================================================
 def run_task3_c(scenario):
 
@@ -181,15 +241,18 @@ def run_task3_c(scenario):
         model_dir = "saved_models/Scenario3"
 
     
+    # ============================
+    # COLLECT ALL TASKS
+    # ============================
+    ml_tasks = []
+    cnn_tasks = []
 
-    # Iterate folds — FIXED SCENARIO 1 UNPACKING
     if scenario == 1:
         for fold_idx, train_idx, test_idx in split_fn(Z, pd.Series(y_window), 2):
-            print(train_idx,test_idx)
-                # Extract latent vectors
+            fold = fold_idx + 1
             Z_train, y_train = Z[train_idx], y[train_idx]
             Z_test,  y_test  = Z[test_idx],  y[test_idx]
-            fold = fold_idx + 1
+            
             models = {
                 "OCSVM": f"{model_dir}/OCSVM_Fold{fold}.joblib",
                 "LOF":   f"{model_dir}/LOF_Fold{fold}.joblib",
@@ -197,61 +260,55 @@ def run_task3_c(scenario):
             }
 
             for name, path in models.items():
-                if not os.path.exists(path):
-                    print(f"[WARN] Missing {name}: {path}")
-                    continue
-
-                model = joblib.load(path)
-                out_dir = f"Task3_Results/Scenario1/LIME/Fold{fold}/{name}"
-
-                run_lime_for_model(name, model, Z_train, Z_test, out_dir)
+                if os.path.exists(path):
+                    ml_tasks.append((scenario, fold, name, path, Z_train, Z_test))
     else:
-       for fold_idx, attack_id, train_idx, test_idx in split_fn(Z, pd.Series(y_window), 2):
+        for fold_idx, attack_id, train_idx, test_idx in split_fn(Z, pd.Series(y_window), 2):
             fold = fold_idx + 1
             Z_train, y_train = Z[train_idx], y[train_idx]
             Z_test,  y_test  = Z[test_idx],  y[test_idx]
+            
             ml_models = {
                 "SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
                 "kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
                 "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib"
             }
-            # ML MODELS
+
             for name, path in ml_models.items():
-
-                if not os.path.exists(path):
-                    print(f"[WARN] Missing ML model: {path}")
-                    continue
-
-                model = joblib.load(path)
-                out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/{name}"
-
-                run_lime_for_model(name, model, Z_train, Z_test, out_dir)
+                if os.path.exists(path):
+                    ml_tasks.append((scenario, fold, name, path, Z_train, Z_test))
             
-            # CNN MODEL
-            print(M, latent_dim)
+            # Collect CNN tasks
             cnn_path = f"exports/Scenario{scenario}/CNN/CNN_Fold{fold}.h5"
-            if not os.path.exists(cnn_path):
-                print(f"[WARN] Missing CNN model: {cnn_path}")
-                continue
+            if os.path.exists(cnn_path):
+                cnn_tasks.append((scenario, fold, Z_train, y_train, Z_test, y_test, M, latent_dim, model_dir))
 
-            X_train_w, y_train_w = create_windows(Z_train, y_train, M)
-            X_test_w,  y_test_w  = create_windows(Z_test,  y_test,  M)  
+    # ============================
+    # PARALLEL EXECUTION — ML Models (Use 40-50 workers)
+    # ============================
+    if ml_tasks:
+        print(f"\n[INFO] Processing {len(ml_tasks)} ML model tasks with {min(50, mp.cpu_count()-2)} workers...")
+        num_workers = min(50, mp.cpu_count() - 2)  # Use up to 50 workers, leave 2 cores free
+        
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            results = list(executor.map(process_ml_model, ml_tasks, chunksize=2))
+        
+        for scenario_r, fold, model_name, status in results:
+            print(f"[RESULT] Scenario {scenario_r}, Fold {fold}, {model_name}: {status}")
 
-            cnn_model = load_model(cnn_path)
-            cnn_predict_fn = make_cnn_predict_fn(cnn_model, M, latent_dim)
+    # ============================
+    # PARALLEL CNN MODELS (Use 3 workers for 3 GPUs)
+    # ============================
+    if cnn_tasks:
+        print(f"\n[INFO] Processing {len(cnn_tasks)} CNN models with 3 GPU-bound workers...")
+        num_gpu_workers = 3  # One worker per GPU
+        
+        with ProcessPoolExecutor(max_workers=num_gpu_workers) as executor:
+            results = list(executor.map(process_cnn_model, cnn_tasks))
+        
+        for scenario_r, fold, model_name, status in results:
+            print(f"[RESULT] Scenario {scenario_r}, Fold {fold}, {model_name}: {status}")
 
-            out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/CNN"
-
-            run_lime_for_model(
-                "CNN",
-                cnn_model,
-                X_train_w,
-                X_test_w,
-                out_dir,
-                predict_fn=cnn_predict_fn,
-                flatten=True
-            )
-       
     print("\n=== TASK 3(c) COMPLETED ===")
 
 

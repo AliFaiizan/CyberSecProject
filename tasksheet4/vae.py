@@ -779,10 +779,17 @@ def main():
     X = all_data[:, :-1]  # all columns except last
     y = all_data[:, -1]   # last column
 
-    from sklearn.preprocessing import StandardScaler
+    #from sklearn.preprocessing import StandardScaler
 
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
+    # scaler = StandardScaler()
+    # X = scaler.fit_transform(X)
+    import pickle
+    with open('scaler.pkl', 'rb') as f:
+        scaler = pickle.load(f)
+
+    # Apply the SAME normalization transformation
+    X = scaler.transform(X)  # Use transform(), NOT fit_transform()!
+
     T, F = X.shape
     print(f"[INFO] Raw dataset: {T} timesteps, {F} features.")
 
