@@ -1,0 +1,13 @@
+{
+  "train_shape": [
+    1004402,
+    88
+  ],
+  "test_shape": [
+    361200,
+    88
+  ],
+  "train_attack_rate": 0.0,
+  "test_attack_rate": 0.03330564784053156,
+  "feature_count": 86
+}
