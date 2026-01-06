@@ -253,7 +253,7 @@ def run_task3_c(scenario):
     cnn_tasks = []
 
     if scenario == 1:
-        for fold_idx, train_idx, test_idx in split_fn(Z, pd.Series(y_window), 2):
+        for fold_idx, train_idx, test_idx in split_fn(Z, pd.Series(y_window), 5):
             fold = fold_idx + 1
             Z_train, y_train = Z[train_idx], y[train_idx]
             Z_test,  y_test  = Z[test_idx],  y[test_idx]
