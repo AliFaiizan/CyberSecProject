@@ -47,11 +47,11 @@ def process_ml_model(args):
         else:
             out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/{model_name}"
         
-        run_lime_for_model(model_name, model, Z_train, Z_test, out_dir)
-        return (scenario, fold, model_name, "SUCCESS")
+        run_lime_for_model(model_name, model, Z_train, Z_test, out_dir, scenario=scenario, fold=fold)
+        return (scenario, fold, model_name, "✓ SUCCESS")
     except Exception as e:
-        print(f"[ERROR] Scenario {scenario}, Fold {fold}, {model_name}: {e}")
-        return (scenario, fold, model_name, f"FAILED: {str(e)}")
+        print(f"[S{scenario}F{fold}] {model_name}: ✗ FAILED — {str(e)[:50]}")
+        return (scenario, fold, model_name, f"✗ FAILED: {str(e)[:50]}")
 
 
 def process_cnn_model(args):
@@ -63,7 +63,7 @@ def process_cnn_model(args):
     try:
         cnn_path = f"exports/Scenario{scenario}/CNN/CNN_Fold{fold}.h5"
         if not os.path.exists(cnn_path):
-            return (scenario, fold, "CNN", "SKIPPED (not found)")
+            return (scenario, fold, "CNN", "⊘ SKIPPED")
         
         X_train_w, y_train_w = create_windows(Z_train, y_train, M)
         X_test_w, y_test_w = create_windows(Z_test, y_test, M)
@@ -79,19 +79,21 @@ def process_cnn_model(args):
             X_test_w,
             out_dir,
             predict_fn=cnn_predict_fn,
-            flatten=True
+            flatten=True,
+            scenario=scenario,
+            fold=fold
         )
-        return (scenario, fold, "CNN", "SUCCESS")
+        return (scenario, fold, "CNN", "✓ SUCCESS")
     except Exception as e:
-        print(f"[ERROR] Scenario {scenario}, Fold {fold}, CNN: {e}")
-        return (scenario, fold, "CNN", f"FAILED: {str(e)}")
+        print(f"[S{scenario}F{fold}] CNN: ✗ FAILED — {str(e)[:50]}")
+        return (scenario, fold, "CNN", f"✗ FAILED: {str(e)[:50]}")
 
 
 
 # ========================================================================
 # Run LIME for ML or CNN classifier — ALL SAMPLES + AGGREGATED PLOT
 # ========================================================================
-def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_fn=None, flatten=False, save_individuals=False):
+def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_fn=None, flatten=False, save_individuals=False, scenario=None, fold=None):
     if flatten:
         X_train = X_train.reshape(len(X_train), -1)
         X_test  = X_test.reshape(len(X_test), -1)
@@ -103,13 +105,16 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
         discretize_continuous=True
     )
 
+    # Create tag for clear identification
+    tag = f"[S{scenario}F{fold}] {model_name}" if scenario and fold else f"[{model_name}]"
+
     # Automatic probability wrapper
     if predict_fn is None:
         if hasattr(model, "predict_proba"):
             def predict_fn(x): return model.predict_proba(x)
 
         elif hasattr(model, "decision_function"):
-            print(f"[INFO] {model_name}: Using decision_function")
+            print(f"{tag} | Using decision_function")
             def predict_fn(x):
                 scores = model.decision_function(x)
                 if scores.ndim == 1:
@@ -123,7 +128,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
     num_features = min(8, X_test.shape[1])  # Use up to 15 features
     feature_importance_dict = {f"f{i}": 0.0 for i in range(X_test.shape[1])}
     
-    print(f"[LIME] Running on {len(X_test)} samples for {model_name}...")
+    print(f"{tag} | Running on {len(X_test)} samples...")
     
     for idx in range(len(X_test)):
         exp = explainer.explain_instance(
@@ -140,14 +145,14 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
                 feature_importance_dict[feat_name] += abs(weight)
         # Progress update every 100 samples
         if (idx + 1) % 100 == 0:
-            print(f"[LIME] Processed {idx + 1}/{len(X_test)} samples for {model_name}")
+            print(f"{tag} | {idx + 1}/{len(X_test)} samples")
         
         # Optionally save individual samples (first 3)
         if save_individuals and idx < 3:
             fig = exp.as_pyplot_figure()
             out_file = f"{output_dir}/LIME_{model_name}_sample{idx}.png"
             fig.savefig(out_file, dpi=150, bbox_inches='tight')
-            print(f"[LIME] Saved → {out_file}")
+            print(f"{tag} | Saved → {out_file}")
             plt.close(fig)
     
     # Normalize by number of samples
@@ -172,7 +177,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
     
     agg_file = f"{output_dir}/LIME_{model_name}_aggregated_importance.png"
     plt.savefig(agg_file, dpi=150, bbox_inches='tight')
-    print(f"[LIME] Aggregated plot saved → {agg_file}")
+    print(f"{tag} | Aggregated plot saved")
     plt.close(fig)
     
     # Save CSV
@@ -182,7 +187,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
         'Avg_Absolute_Weight': importances_sorted
     })
     importance_df.to_csv(csv_file, index=False)
-    print(f"[LIME] Importance scores saved → {csv_file}")
+    print(f"{tag} | Feature importance saved")
 
 
 # ========================================================================
