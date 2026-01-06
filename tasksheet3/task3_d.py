@@ -60,7 +60,7 @@ def run_shap_for_model(
     # -----------------------------------------------------
     if model_name == "RF":
         explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X_test_flat[:30])
+        shap_values = explainer.shap_values(X_test_flat)
         print(f"[DEBUG RF] SHAP values type: {type(shap_values)}")
         print(f"[DEBUG RF] SHAP values shape: {shap_values[0].shape if isinstance(shap_values, list) else shap_values.shape}")
         
@@ -128,7 +128,7 @@ def run_shap_for_model(
         background = shap.sample(X_train_flat, 50)
         print(f"[DEBUG OCSVM] Background shape: {background.shape}, X_train_flat: {X_train_flat.shape}")
         explainer  = shap.KernelExplainer(lambda x: anomaly_to_prob(model, x), background)
-        shap_values = explainer.shap_values(X_test_flat[:30])
+        shap_values = explainer.shap_values(X_test_flat[:500])
         print(f"[DEBUG OCSVM] SHAP values shape: {shap_values[0].shape if isinstance(shap_values, list) else shap_values.shape}")
         
         # For binary classification, select attack class (index 1)
