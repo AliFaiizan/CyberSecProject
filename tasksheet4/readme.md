@@ -85,7 +85,7 @@ All experiments use **5-fold cross-validation** and report **precision and recal
    Synthetic normal and attack samples are generated.
 
 2. **HAI-like split construction**  
-   Synthetic data is split to mimic the structure of the HAI-22.04 dataset:
+   Synthetic data is split to mimic the structure of the HAI-22.04 dataset using `balance.py`:
    - Training set: 100% normal samples
    - Test set: Mostly normal with temporally grouped attacks
 
@@ -129,6 +129,7 @@ All experiments use **5-fold cross-validation** and report **precision and recal
 - Synthetic training data generated using GAN
 - CNN evaluated with k-fold cross-validation
 
+`task2.py`
 ---
 
 ### N-gram Detection (Scenario 1)
@@ -137,9 +138,11 @@ Two separate implementations are used:
 
 - **Task 2d:**  
   N-gram detection using raw physical readings and real training data
+ `task2d.py`
 
 - **Task 2e:**  
   N-gram detection using raw physical readings and GAN-generated synthetic training data
+`task2e.py`
 
 For each N in {2, 5, 8}:
 - Bloom filters are constructed from training sequences
@@ -171,6 +174,7 @@ All plots are saved in the `exports/` directory and submitted as part of the res
 ### Objective
 
 The goal of Task 3a is to analyze **where and how classifiers make mistakes**, rather than only comparing performance metrics.
+`task3_venn.py`
 
 ### Methodology
 
@@ -220,13 +224,6 @@ The following libraries are used across all tasks:
 
 ### Machine Learning
 - `scikit-learn`
-  - SVM
-  - kNN
-  - RandomForest
-  - LOF
-  - EllipticEnvelope
-  - OCSVM
-  - Metrics (precision, recall, F1-score)
 
 ### Deep Learning
 - `torch`
@@ -246,6 +243,43 @@ The following libraries are used across all tasks:
 - `warnings`
 
 ---
+
+## Commands Reference
+
+### Task 1 – GAN (Synthetic Data Generation)
+
+```bash
+python task1.py --epochs 50
+python task1.py --M 86 --epochs 50
+python task1.py --epochs 50 --tune
+```
+
+### Task 2 – Feature Extraction and Classification
+#### VAE Feature Extraction
+```bash
+python vae.py --mode reconstruction
+python vae.py --layer-type conv1d --mode classification
+```
+#### ML & CNN Experiments (Scenarios 1–3)
+```bash
+python task2.py --scenario 1 --latent-file vae_features/latent_classification_M20.npy -k 5 -M 20
+python task2.py --scenario 2 --latent-file vae_features/latent_classification_M20.npy -k 5 -M 20
+python task2.py --scenario 3 --latent-file vae_features/latent_classification_M20.npy -k 5 -M 20
+```
+#### N-gram Detection (Scenario 1)
+```bash
+python task2d.py
+python task2e.py
+```
+
+#### Plotting Results
+```bash
+python plot.py
+```
+### Task 3 – Prediction Error Analysis
+```bash
+python task3_venn.py
+```
 
 ## Conclusion
 
