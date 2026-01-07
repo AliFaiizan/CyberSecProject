@@ -147,7 +147,7 @@ def run_shap_for_model(
         background = X_train_cnn[:20]
         explainer = shap.DeepExplainer(model, background)
 
-        shap_vals = explainer.shap_values(X_test_cnn[:10000])
+        shap_vals = explainer.shap_values(X_test_cnn)
         
         print(f"[DEBUG CNN] SHAP values type: {type(shap_vals)}")
         print(f"[DEBUG CNN] SHAP values length/shape: {len(shap_vals) if isinstance(shap_vals, list) else shap_vals.shape}")
