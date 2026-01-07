@@ -282,9 +282,9 @@ def run_task3_d(scenario):
     # SCENARIO 2 & 3 — ML ON RAW Z + CNN ON WINDOWS
     # =====================================================
     ml_models = {
-        #"SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
-        #"kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
-        #"RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib",
+        "SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
+        "kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
+        "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib",
     }
 
     # ML models use Z (same as your LIME)

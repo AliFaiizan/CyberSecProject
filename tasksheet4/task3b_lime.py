@@ -65,7 +65,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
     
     print(f"[LIME] Running on {len(X_test)} samples for {model_name}...")
     
-    for idx in range(len(X_test[:1000])):
+    for idx in range(len(X_test)):
         exp = explainer.explain_instance(
             X_test[idx],
             predict_fn,
@@ -123,7 +123,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
 # ========================================================================
 def run_task3_c(scenario):
 
-    print(f"\n=== RUNNING TASK 3(c) — LIME EXPLANATIONS (Scenario {scenario}) ===")
+    print(f"\n=== RUNNING TASK 3(b) — LIME EXPLANATIONS (Scenario {scenario}) ===")
 
     # Load labels from dataset
     # train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
@@ -226,21 +226,21 @@ def run_task3_c(scenario):
     # SCENARIO 2 & 3 — ML models + CNN
     # =====================================================
     else:
-        # ml_models = {
-        #     "SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
-        #     "kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
-        #     "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib"
-        # }
+        ml_models = {
+            "SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
+            "kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
+            "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib"
+        }
 
-        # # ML MODELS
-        # for name, path in ml_models.items():
-        #     if not os.path.exists(path):
-        #         print(f"[WARN] Missing ML model: {path}")
-        #         continue
+        # ML MODELS
+        for name, path in ml_models.items():
+            if not os.path.exists(path):
+                print(f"[WARN] Missing ML model: {path}")
+                continue
 
-        #     model = joblib.load(path)
-        #     out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/{name}"
-        #     run_lime_for_model(name, model, Z_train, Z_test, out_dir)
+            model = joblib.load(path)
+            out_dir = f"Task3_Results/Scenario{scenario}/LIME/Fold{fold}/{name}"
+            run_lime_for_model(name, model, Z_train, Z_test, out_dir)
 
         # CNN MODEL
         print(f"[INFO] M={M}, latent_dim={latent_dim}")
