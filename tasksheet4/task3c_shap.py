@@ -147,7 +147,7 @@ def run_shap_for_model(
         background = X_train_cnn[:20]
         explainer = shap.DeepExplainer(model, background)
 
-        shap_vals = explainer.shap_values(X_test_cnn)
+        shap_vals = explainer.shap_values(X_test_cnn[:1000])
         
         print(f"[DEBUG CNN] SHAP values type: {type(shap_vals)}")
         print(f"[DEBUG CNN] SHAP values length/shape: {len(shap_vals) if isinstance(shap_vals, list) else shap_vals.shape}")
@@ -284,7 +284,7 @@ def run_task3_d(scenario):
     ml_models = {
         #"SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
         #"kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
-        "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib",
+        #"RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib",
     }
 
     # ML models use Z (same as your LIME)

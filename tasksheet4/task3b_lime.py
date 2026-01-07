@@ -65,7 +65,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
     
     print(f"[LIME] Running on {len(X_test)} samples for {model_name}...")
     
-    for idx in range(len(X_test)):
+    for idx in range(len(X_test[:1000])):
         exp = explainer.explain_instance(
             X_test[idx],
             predict_fn,

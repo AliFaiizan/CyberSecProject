@@ -8,11 +8,18 @@ The work is structured into three main tasks:
 
 - **Task 1:** Generation of synthetic datasets using a custom GAN  
 - **Task 2:** Execution of classification experiments using synthetic data  
-- **Task 3a:** Analysis of prediction errors using Venn diagrams  
+- **Task 3a:** Analysis of prediction errors using Venn diagrams
+- **Task 3b-c:** LIME and SHAP analysison predicted values  
 
 All experiments are implemented in Python and evaluated using k-fold cross-validation.
 
 ---
+
+## Structure 
+|-datasets
+|  - hai22.04
+|-tasksheet4
+|  - rest of the code
 
 ## Task 1: Generation of Synthetic Dataset
 
@@ -91,7 +98,7 @@ All experiments use **5-fold cross-validation** and report **precision and recal
 
 3. **Feature extraction using VAE**  
    - `vae.py` is applied to training and testing data
-   - Latent features are extracted per fold
+   - Latent features are extracted
    - Decoder selection respects the evaluation scenario
 
 ---
@@ -257,14 +264,12 @@ python task1.py --epochs 50 --tune
 ### Task 2 – Feature Extraction and Classification
 #### VAE Feature Extraction
 ```bash
-python vae.py --mode reconstruction
-python vae.py --layer-type conv1d --mode classification
+python vae.py --mode classification
 ```
 #### ML & CNN Experiments (Scenarios 1–3)
 ```bash
-python task2.py --scenario 1 --latent-file vae_features/latent_classification_M20.npy -k 5 -M 20
-python task2.py --scenario 2 --latent-file vae_features/latent_classification_M20.npy -k 5 -M 20
-python task2.py --scenario 3 --latent-file vae_features/latent_classification_M20.npy -k 5 -M 20
+python task2.py --scenario <number> --latent-file vae_features/task1_dense_relu_ld8_classification_M20.npy 
+
 ```
 #### N-gram Detection (Scenario 1)
 ```bash
@@ -280,6 +285,33 @@ python plot.py
 ```bash
 python task3_venn.py
 ```
+### Task3 - LIME AND SHAP analysis
+```bash
+python task3b_lime.py --scenario <number>
+python task3c_shap.py --scenario <number>
+```
+### Explainers Used
+
+| Model | Explainer | Notes |
+|-------|-----------|-------|
+| RandomForest | TreeExplainer | Fast, exact |
+| SVM | KernelExplainer | Uses decision_function wrapper |
+| kNN | KernelExplainer | 500 samples for accuracy |
+| OCSVM | KernelExplainer | Anomaly score → probability |
+| LOF | Not supported | Skip (use LIME instead) |
+| CNN | DeepExplainer | Aggregates across timesteps |
+
+
+## Data Requirements
+
+Both scripts use:
+- **Latent features**: `vae_features/task1_dense_relu_ld8_{mode}_M20.npy`
+- **Trained models**: `saved_models/Scenario{N}/{Model}_Fold{F}.joblib` or `.h5`
+- **Labels**: Loaded from `../synthetic_train and synthetic_test/` 
+
+## Note
+
+All models being used need to be present in coresponding directory in order to run experiments. make sure to run each task consectively to have all the model available for use
 
 ## Conclusion
 
