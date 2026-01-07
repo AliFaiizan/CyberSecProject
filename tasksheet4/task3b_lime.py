@@ -60,7 +60,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
             raise RuntimeError(f"{model_name} has no probability or decision_function!")
 
     # Run LIME on ALL samples
-    num_features = min(8, X_test.shape[1])  # Use up to 15 features
+    num_features = min(8, X_test.shape[1])  # Use up to 8 features
     feature_importance_dict = {f"f{i}": 0.0 for i in range(X_test.shape[1])}
     
     print(f"[LIME] Running on {len(X_test)} samples for {model_name}...")
@@ -86,6 +86,10 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
             fig.savefig(out_file, dpi=150, bbox_inches='tight')
             print(f"[LIME] Saved → {out_file}")
             plt.close(fig)
+        
+        # Progress tracking every 1000 samples
+        if (idx + 1) % 1000 == 0:
+            print(f"[LIME] Processed {idx + 1}/{len(X_test)} samples...")
     
     # Normalize by number of samples
     for key in feature_importance_dict:
