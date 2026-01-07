@@ -278,6 +278,8 @@ def main():
                 "predicted_label": y_pred,
                 "Attack": y_true
             }).to_csv(f"{cnn_dir}/Predictions_Fold{fold_idx+1}.csv", index=False)
+            os.makedirs(f"saved_models/Scenario{sc}", exist_ok=True)
+            model.save(f"saved_models/Scenario{sc}/CNN_Fold{fold_idx+1}.h5")
 
             # Compute metrics
             tp = ((y_pred == 1) & (y_true == 1)).sum()

@@ -100,5 +100,5 @@ for i in range(1, len(attack_indices)):
         blocks += 1
 print(f"  Attack blocks: {blocks}")
 
-print("\n✓ Matches HAI-22.04 structure perfectly!")
+print("\n Matches HAI-22.04 structure perfectly!")
 print("="*60)

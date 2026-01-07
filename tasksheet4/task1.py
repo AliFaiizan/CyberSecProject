@@ -370,7 +370,7 @@ def main():
     
     np.save("synthetic_normal.npy", synth_normal)
     torch.save(G_normal.state_dict(), "G_normal.pt")
-    print(f"\n✓ synthetic_normal.npy: {synth_normal.shape}")
+    print(f"\n synthetic_normal.npy: {synth_normal.shape}")
     
     # ==========================================
     # GAN 2: ATTACK DATA
@@ -395,7 +395,7 @@ def main():
     
     np.save("synthetic_attack.npy", synth_attack)
     torch.save(G_attack.state_dict(), "G_attack.pt")
-    print(f"\n✓ synthetic_attack.npy: {synth_attack.shape}")
+    print(f"\n synthetic_attack.npy: {synth_attack.shape}")
     
     # ==========================================
     # SUMMARY

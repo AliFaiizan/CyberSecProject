@@ -22,7 +22,7 @@ process = psutil.Process()
 
 
 # =====================================================================
-# ★★★ FIX: Generate proper window labels from raw data ★★★
+# Generate proper window labels from raw data 
 # =====================================================================
 def load_latent_features_and_labels(latent_file, M=20, train_files=None, test_files=None):
     """
@@ -45,19 +45,19 @@ def load_latent_features_and_labels(latent_file, M=20, train_files=None, test_fi
     # Load latent features
     print(f"Loading latent features from: {latent_file}")
     Z = np.load(latent_file)
-    print(f"  ✓ Loaded latent features: {Z.shape}")
+    print(f"Loaded latent features: {Z.shape}")
     
-    # Try to load pre-saved labels first (if Ali added them later)
+    # Try to load pre-saved labels first
     label_file = latent_file.replace('.npy', '_labels.npy')
     if os.path.exists(label_file):
-        print(f"  ✓ Found pre-saved window labels: {label_file}")
+        print(f"Found pre-saved window labels: {label_file}")
         y_window = np.load(label_file)
-        print(f"  ✓ Loaded window labels: {y_window.shape}")
+        print(f"Loaded window labels: {y_window.shape}")
     else:
-        print(f"  ⚠ No pre-saved labels found. Regenerating from raw data...")
+        print(f"No pre-saved labels found. Regenerating from raw data...")
         
         # Load raw data
-        print(f"  → Loading raw data...")
+        print(f"Loading raw data...")
         train_data = np.load("synthetic_train.npy")  # shape: [N_train, F]
         test_data = np.load("synthetic_test.npy")    # shape: [N_test, F]
         test_labels = np.load("synthetic_test_labels.npy")  # shape: [N_test,] or [N_test, 1]
@@ -78,14 +78,14 @@ def load_latent_features_and_labels(latent_file, M=20, train_files=None, test_fi
         print(f"    Raw data shape: X={X_raw.shape}, y={y_raw.shape}")
         
         # Generate window labels using SAME logic as Task 1
-        print(f"  → Generating window labels (M={M}, mode=classification)...")
+        print(f"Generating window labels (M={M}, mode=classification)...")
         _, y_window = create_windows_for_vae(
             X_raw,
             y_raw,
             window_size=M,
             mode="classification"  # Aggregates: label=1 if ANY row in window is attack
         )
-        print(f"    ✓ Generated window labels: {y_window.shape}")
+        print(f"Generated window labels: {y_window.shape}")
     
     # Verify alignment
     print("\n" + "-"*70)
@@ -100,7 +100,7 @@ def load_latent_features_and_labels(latent_file, M=20, train_files=None, test_fi
             f"Make sure window size M={M} matches what was used in Task 1."
         )
     
-    print(f"  ✓ ALIGNMENT VERIFIED!")
+    print(f"ALIGNMENT VERIFIED!")
     print(f"\n  Normal windows:  {(y_window == 0).sum()} ({(y_window == 0).sum()/len(y_window)*100:.1f}%)")
     print(f"  Attack windows:  {(y_window == 1).sum()} ({(y_window == 1).sum()/len(y_window)*100:.1f}%)")
     print("="*70 + "\n")
@@ -116,7 +116,7 @@ def save_model(model, scenario_id, model_name, fold_idx):
     os.makedirs(out_dir, exist_ok=True)
     path = f"{out_dir}/{model_name}_Fold{fold_idx+1}.joblib"
     dump(model, path)
-    print(f"  → Saved model: {path}")
+    print(f"Saved model: {path}")
 
 
 # =====================================================================
@@ -138,7 +138,7 @@ def map_windows_to_rows(window_preds, N, M):
     row_counts = np.zeros(N)
 
     for w in range(len(window_preds)):
-        start, end = w, min(w + M, N)  # ★ FIX: Ensure we don't exceed N
+        start, end = w, min(w + M, N) 
         row_votes[start:end] += window_preds[w]
         row_counts[start:end] += 1
 
@@ -198,7 +198,7 @@ def run_and_save(model_name, run_fn, X_df, y_series, scenario_fn, k, scenario_id
         print(f"  Fold {fold_idx+1}: precision={precision:.4f}, recall={recall:.4f}")
 
     pd.DataFrame(rows).to_csv(f"{model_dir}/metrics_summary.csv", index=False)
-    print(f"  ✓ Saved metrics summary")
+    print(f"Saved metrics summary")
 
 
 # =====================================================================
@@ -294,6 +294,8 @@ def main():
                 "predicted_label": y_pred,
                 "Attack": y_true
             }).to_csv(f"{cnn_dir}/Predictions_Fold{fold_idx+1}.csv", index=False)
+            os.makedirs(f"saved_models/Scenario{sc}", exist_ok=True)
+            model.save(f"saved_models/Scenario{sc}/CNN_Fold{fold_idx+1}.h5")
 
             # Compute metrics
             tp = ((y_pred == 1) & (y_true == 1)).sum()
