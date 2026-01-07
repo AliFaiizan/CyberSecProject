@@ -244,7 +244,7 @@ def run_task3_c(scenario):
 
         # CNN MODEL
         print(f"[INFO] M={M}, latent_dim={latent_dim}")
-        cnn_path = f"{model_dir}/Scenario{scenario}/CNN_Fold{fold}.h5"
+        cnn_path = f"{model_dir}/CNN_Fold{fold}.h5"
         if not os.path.exists(cnn_path):
             print(f"[WARN] Missing CNN model: {cnn_path}")
         else:
