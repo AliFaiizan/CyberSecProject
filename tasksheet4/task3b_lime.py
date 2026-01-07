@@ -77,7 +77,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
             # Parse feature name (e.g., "f5 <= 0.5" → "f5")
             feat_name = feature.split()[0]
             if feat_name in feature_importance_dict:
-                feature_importance_dict[feat_name] += weight
+                feature_importance_dict[feat_name] += abs(weight)
         
         # Optionally save individual samples (first 3)
         if save_individuals and idx < 3:
@@ -99,20 +99,16 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
     features = list(feature_importance_dict.keys())
     importances = list(feature_importance_dict.values())
     
-    # Sort by absolute importance
-    sorted_pairs = sorted(zip(features, importances), key=lambda x: abs(x[1]), reverse=True)
+    # Sort by importance
+    sorted_pairs = sorted(zip(features, importances), key=lambda x: x[1], reverse=True)
     features_sorted = [p[0] for p in sorted_pairs]
     importances_sorted = [p[1] for p in sorted_pairs]
     
-    # Create colors: red for negative (decreases attack prediction), blue for positive (increases attack prediction)
-    colors = ['#d62728' if imp < 0 else '#1f77b4' for imp in importances_sorted]
-    
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.barh(features_sorted, importances_sorted, color=colors)
-    ax.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
-    ax.set_xlabel('Average Feature Weight (Negative = Decreases Attack, Positive = Increases Attack)', fontsize=11)
+    ax.barh(features_sorted, importances_sorted, color='steelblue')
+    ax.set_xlabel('Average Absolute Feature Weight', fontsize=12)
     ax.set_ylabel('Feature', fontsize=12)
-    ax.set_title(f'LIME Feature Importance — {model_name}\n(Aggregated over {len(X_test)} samples)', fontsize=13)
+    ax.set_title(f'LIME Feature Importance — {model_name} (Aggregated over {len(X_test)} samples)', fontsize=13)
     plt.tight_layout()
     
     agg_file = f"{output_dir}/LIME_{model_name}_aggregated_importance.png"
@@ -248,7 +244,7 @@ def run_task3_c(scenario):
 
         # CNN MODEL
         print(f"[INFO] M={M}, latent_dim={latent_dim}")
-        cnn_path = f"exports/Scenario{scenario}/CNN/CNN_Fold{fold}.h5"
+        cnn_path = f"{model_dir}/Scenario{scenario}/CNN_Fold{fold}.h5"
         if not os.path.exists(cnn_path):
             print(f"[WARN] Missing CNN model: {cnn_path}")
         else:
