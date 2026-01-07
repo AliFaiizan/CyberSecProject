@@ -275,7 +275,7 @@ def run_task3_c(scenario):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser("Task 3(c) — LIME explanations")
+    parser = argparse.ArgumentParser("Task 3(b) — LIME explanations")
     parser.add_argument("--scenario", type=int, required=True)
     parser.add_argument("--latent-dim", type=int, default=8)
     parser.add_argument("--M", type=int, default=20)

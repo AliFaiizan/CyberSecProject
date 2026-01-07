@@ -282,8 +282,8 @@ def run_task3_d(scenario):
     # SCENARIO 2 & 3 — ML ON RAW Z + CNN ON WINDOWS
     # =====================================================
     ml_models = {
-        "SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
-        "kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
+        #"SVM": f"{model_dir}/SVM_Fold{fold}.joblib",
+        #"kNN": f"{model_dir}/kNN_Fold{fold}.joblib",
         "RF":  f"{model_dir}/RandomForest_Fold{fold}.joblib",
     }
 
@@ -296,7 +296,7 @@ def run_task3_d(scenario):
         run_shap_for_model(name, model, Z_train, Z_test, out_dir)
 
     # CNN
-    cnn_path = f"exports/Scenario{scenario}/CNN/CNN_Fold{fold}.h5"
+    cnn_path = f"{model_dir}/CNN_Fold{fold}.h5"
     if os.path.exists(cnn_path):
         X_train_w, y_train_w = create_windows(Z_train, y_train, M)
         X_test_w,  y_test_w  = create_windows(Z_test,  y_test,  M)
@@ -315,12 +315,12 @@ def run_task3_d(scenario):
             latent_dim=latent_dim
         )
 
-    print("\n=== TASK 3(d) COMPLETED ===")
+    print("\n=== TASK 3(c) COMPLETED ===")
 
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser("Task 3(d) — SHAP explanations")
+    parser = argparse.ArgumentParser("Task 3(c) — SHAP explanations")
     parser.add_argument("--scenario", "-sc", type=int, required=True, choices=[1, 2, 3], help="Scenario number (1, 2, or 3)")
     args = parser.parse_args()
     run_task3_d(args.scenario)
