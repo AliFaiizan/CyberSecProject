@@ -8,6 +8,7 @@ from utils import load_data
 import re
 from lime.lime_tabular import LimeTabularExplainer
 from tensorflow.keras.models import load_model
+import matplotlib.pyplot as plt
 
 from task2_cnn_latent import create_windows
 from scenarios import scenario_1_split, scenario_2_split, scenario_3_split
@@ -25,9 +26,9 @@ def make_cnn_predict_fn(model, M, latent_dim):
 
 
 # ========================================================================
-# Run LIME for ML or CNN classifier
+# Run LIME for ML or CNN classifier — ALL SAMPLES + AGGREGATED PLOT
 # ========================================================================
-def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_fn=None, flatten=False):
+def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_fn=None, flatten=False, save_individuals=False):
     if flatten:
         X_train = X_train.reshape(len(X_train), -1)
         X_test  = X_test.reshape(len(X_test), -1)
@@ -55,21 +56,59 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
         else:
             raise RuntimeError(f"{model_name} has no probability or decision_function!")
 
-    # Pick 3 samples
-    indices = np.linspace(0, len(X_test)-1, 3, dtype=int)
-
-    for idx in indices:
+    # Run LIME on ALL samples
+    num_features = min(8, X_test.shape[1])  # Use up to 15 features
+    feature_importance_dict = {f"f{i}": 0.0 for i in range(X_test.shape[1])}
+    
+    print(f"[LIME] Running on {len(X_test)} samples for {model_name}...")
+    
+    for idx in range(len(X_test)):
         exp = explainer.explain_instance(
             X_test[idx],
             predict_fn,
-            num_features=15
+            num_features=num_features
         )
-
-         # Save as PNG
-        fig = exp.as_pyplot_figure()
-        out_file = f"{output_dir}/LIME_{model_name}_sample{idx}.png"
-        fig.savefig(out_file, dpi=150, bbox_inches='tight')
-        print(f"[LIME] Saved → {out_file}")
+        
+        # Extract feature weights (for class 1 = attack)
+        for feature, weight in exp.as_list():
+            # Parse feature name (e.g., "f5 <= 0.5" → "f5")
+            feat_name = feature.split()[0]
+            if feat_name in feature_importance_dict:
+                feature_importance_dict[feat_name] += abs(weight)
+        
+        # Optionally save individual samples (first 3)
+        if save_individuals and idx < 3:
+            fig = exp.as_pyplot_figure()
+            out_file = f"{output_dir}/LIME_{model_name}_sample{idx}.png"
+            fig.savefig(out_file, dpi=150, bbox_inches='tight')
+            print(f"[LIME] Saved → {out_file}")
+            plt.close(fig)
+    
+    # Normalize by number of samples
+    for key in feature_importance_dict:
+        feature_importance_dict[key] /= len(X_test)
+    
+    # Create aggregated plot
+    features = list(feature_importance_dict.keys())
+    importances = list(feature_importance_dict.values())
+    
+    # Sort by importance
+    sorted_pairs = sorted(zip(features, importances), key=lambda x: x[1], reverse=True)
+    features_sorted = [p[0] for p in sorted_pairs]
+    importances_sorted = [p[1] for p in sorted_pairs]
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.barh(features_sorted, importances_sorted, color='steelblue')
+    ax.set_xlabel('Average Absolute Feature Weight', fontsize=12)
+    ax.set_ylabel('Feature', fontsize=12)
+    ax.set_title(f'LIME Feature Importance — {model_name} (Aggregated over {len(X_test)} samples)', fontsize=13)
+    plt.tight_layout()
+    
+    agg_file = f"{output_dir}/LIME_{model_name}_aggregated_importance.png"
+    plt.savefig(agg_file, dpi=150, bbox_inches='tight')
+    print(f"[LIME] Aggregated plot saved → {agg_file}")
+    plt.close(fig)
+    
 
 
 # ========================================================================
