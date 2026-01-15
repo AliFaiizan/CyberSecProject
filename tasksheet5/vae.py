@@ -756,41 +756,14 @@ def main():
     # --------------------------------------------------------------
     # LOAD REAL DATA
     # --------------------------------------------------------------
-    # train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
-    # test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
-    # Load train and test data
-    # Loading synthetic data from GAN
-    train_data = np.load("synthetic_train.npy")  # shape: [N_train, F]
-    test_data = np.load("synthetic_test.npy")    # shape: [N_test, F]
-    test_labels = np.load("synthetic_test_labels.npy")  # shape: [N_test,] or [N_test, 1]
+    train_files = sorted(glob("../datasets/hai-22.04/train1.csv"))
+    test_files  = sorted(glob("../datasets/hai-22.04/test1.csv"))
 
-    # Ensure test_labels is a column vector
-    if test_labels.ndim == 1:
-        test_labels = test_labels[:, None]
+    X, y = load_data(train_files, test_files)   # X: [T,F], y: [T]
+    from sklearn.preprocessing import StandardScaler
 
-    # Add label column to train (all zeros)
-    train_labels = np.zeros((train_data.shape[0], 1))
-    train_data_with_label = np.hstack([train_data, train_labels])
-    test_data_with_label = np.hstack([test_data, test_labels])
-
-    # Combine
-    all_data = np.vstack([train_data_with_label, test_data_with_label])
-
-    # Now, features and labels:
-    X = all_data[:, :-1]  # all columns except last
-    y = all_data[:, -1]   # last column
-
-    #from sklearn.preprocessing import StandardScaler
-
-    # scaler = StandardScaler()
-    # X = scaler.fit_transform(X)
-    import pickle
-    with open('scaler.pkl', 'rb') as f:
-        scaler = pickle.load(f)
-
-    # Apply the SAME normalization transformation
-    X = scaler.transform(X)  # Use transform(), NOT fit_transform()!
-
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
     T, F = X.shape
     print(f"[INFO] Raw dataset: {T} timesteps, {F} features.")
 
