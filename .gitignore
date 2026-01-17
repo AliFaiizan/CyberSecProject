@@ -8,4 +8,8 @@ __pycache__/
 *.zip
 datasets/*
 tasksheet2/exports/
+sheet4/exports_sheet4/
+sheet4/saved_models_sheet4/
 tasksheet4/Task3_Results/*
+exports/*
+saved_models/*
