@@ -272,7 +272,7 @@ def main():
             print(f"    Generating {n_normal} NORMAL synthetic samples (Scenario 1)")
             
             X_synth_normal_norm = generate_synthetic(G_normal, n_normal, device)
-            X_train_synthetic_raw = gan_scaler.inverse_transform(X_synth_normal_norm * 5.0)
+            X_train_synthetic_raw = gan_scaler.inverse_transform(X_synth_normal_norm)
             y_train_synthetic = np.zeros(n_normal, dtype=int)
         else:
             # Scenarios 2 & 3: Normal + Attacks
@@ -319,9 +319,9 @@ def main():
         os.makedirs(fold_dir, exist_ok=True)
         
         np.save(f"{fold_dir}/train_latent.npy", Z_train_synthetic.astype(np.float32))
-        np.save(f"{fold_dir}/train_labels.npy", y_train_windows.astype(np.int32))
+        np.save(f"{fold_dir}/train_labels.npy", y_train_windows.astype(np.int32)) # y_train_synthetic
         np.save(f"{fold_dir}/test_latent.npy", Z_test_real.astype(np.float32))
-        np.save(f"{fold_dir}/test_labels.npy", y_test_windows.astype(np.int32))
+        np.save(f"{fold_dir}/test_labels.npy", y_test_windows.astype(np.int32)) # y_test_real_fold
         
         print(f"    ✓ Saved to {fold_dir}/")
     

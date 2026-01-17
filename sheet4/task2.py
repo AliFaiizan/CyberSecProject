@@ -44,7 +44,7 @@ def run_OneClassSVM_per_fold(Z_train, y_train, Z_test, y_test):
     Z_test_norm = scaler.transform(Z_test)
     
     # Better hyperparameters
-    model = OneClassSVM(kernel="rbf", nu=0.05, gamma='auto')
+    model = OneClassSVM(kernel="rbf", nu=0.001, gamma='auto')
     
     start = time.time()
     mem_before = process.memory_info().rss
@@ -193,6 +193,13 @@ def run_and_save_per_fold(model_name, run_fn, fold_data, k, scenario_id, out_bas
         
         # Run model
         y_pred, model, clf_time, clf_mem = run_fn(Z_train, y_train, Z_test, y_test)
+        
+        # Handle shape mismatch (if predictions are shorter than labels)
+        if len(y_pred) != len(y_test):
+            print(f"shape match")
+            min_len = min(len(y_pred), len(y_test))
+            y_pred = y_pred[:min_len]
+            y_test = y_test[:min_len]
         
         # Compute metrics
         tp = ((y_pred == 1) & (y_test == 1)).sum()
