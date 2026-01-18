@@ -13,6 +13,7 @@ import psutil
 import numpy as np
 import pandas as pd
 from joblib import dump
+from sklearn import svm
 from sklearn.svm import OneClassSVM, SVC
 from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor, KNeighborsClassifier
@@ -35,7 +36,7 @@ def save_model(model, scenario_id, model_name, fold_idx):
 # =========================================================
 # PER-FOLD CLASSIFIERS WITH NORMALIZATION
 # =========================================================
-def run_OneClassSVM_per_fold(Z_train, y_train, Z_test, y_test):
+def run_OneClassSVM_per_fold(Z_train, y_train, Z_test, y_test, params):
     """Train OCSVM with feature normalization"""
     
     # CRITICAL FIX: Normalize features to handle distribution mismatch
@@ -57,7 +58,7 @@ def run_OneClassSVM_per_fold(Z_train, y_train, Z_test, y_test):
     return y_pred, model, time.time() - start, mem_after - mem_before
 
 
-def run_LOF_per_fold(Z_train, y_train, Z_test, y_test):
+def run_LOF_per_fold(Z_train, y_train, Z_test, y_test,params):
     """Train LOF with feature normalization"""
     
     # Normalize features
@@ -79,7 +80,7 @@ def run_LOF_per_fold(Z_train, y_train, Z_test, y_test):
     return y_pred, model, time.time() - start, mem_after - mem_before
 
 
-def run_EllipticEnvelope_per_fold(Z_train, y_train, Z_test, y_test):
+def run_EllipticEnvelope_per_fold(Z_train, y_train, Z_test, y_test,params):
     """Train EllipticEnvelope with feature normalization"""
     
     # Normalize features
@@ -101,7 +102,7 @@ def run_EllipticEnvelope_per_fold(Z_train, y_train, Z_test, y_test):
     return y_pred, model, time.time() - start, mem_after - mem_before
 
 
-def run_binary_svm_per_fold(Z_train, y_train, Z_test, y_test):
+def run_binary_svm_per_fold(Z_train, y_train, Z_test, y_test,params):
     """Train SVM with feature normalization"""
     
     # Normalize features
@@ -121,7 +122,7 @@ def run_binary_svm_per_fold(Z_train, y_train, Z_test, y_test):
     return y_pred, model, time.time() - start, mem_after - mem_before
 
 
-def run_knn_per_fold(Z_train, y_train, Z_test, y_test):
+def run_knn_per_fold(Z_train, y_train, Z_test, y_test,params):
     """Train kNN with feature normalization"""
     
     # Normalize features
@@ -141,7 +142,7 @@ def run_knn_per_fold(Z_train, y_train, Z_test, y_test):
     return y_pred, model, time.time() - start, mem_after - mem_before
 
 
-def run_random_forest_per_fold(Z_train, y_train, Z_test, y_test):
+def run_random_forest_per_fold(Z_train, y_train, Z_test, y_test, params):
     """Train RandomForest with feature normalization"""
     
     # Normalize features
@@ -165,9 +166,9 @@ def run_random_forest_per_fold(Z_train, y_train, Z_test, y_test):
 # =========================================================
 # RUN AND SAVE RESULTS
 # =========================================================
-def run_and_save_per_fold(model_name, run_fn, fold_data, k, scenario_id, out_base):
+def run_and_save_per_fold(model_name, run_fn, fold_data, k, scenario_id, out_base, param_grid=None):
     """Run classifier on pre-split fold data"""
-    
+    from utils2 import optimal_param_search_with_folds
     model_dir = os.path.join(out_base, model_name)
     os.makedirs(model_dir, exist_ok=True)
     
@@ -177,6 +178,15 @@ def run_and_save_per_fold(model_name, run_fn, fold_data, k, scenario_id, out_bas
     
     rows = []
     
+    #her i want to check optimal params. runfn is the model runing function, the pass that best paras main run function
+    best_params = None
+    if param_grid is not None:
+        print(f"\nPerforming hyperparameter search for {model_name}...")
+        scenario_type = 'oneclass' if scenario_id == 1 else 'binary'
+        best_params, results = optimal_param_search_with_folds(
+            fold_data, run_fn, param_grid, scenario_type
+        )
+        print(f"\nBest params found: {best_params}")
     for fold_idx in range(k):
         print(f"\n  Fold {fold_idx + 1}/{k}:")
         
@@ -188,11 +198,11 @@ def run_and_save_per_fold(model_name, run_fn, fold_data, k, scenario_id, out_bas
         
         # Skip empty folds
         if Z_train.size == 0 or Z_test.size == 0:
-            print(f"    ⚠ Skipping empty fold")
+            print(f"    Skipping empty fold")
             continue
         
         # Run model
-        y_pred, model, clf_time, clf_mem = run_fn(Z_train, y_train, Z_test, y_test)
+        y_pred, model, clf_time, clf_mem = run_fn(Z_train, y_train, Z_test, y_test,best_params)
         
         # Handle shape mismatch (if predictions are shorter than labels)
         if len(y_pred) != len(y_test):
@@ -309,19 +319,47 @@ def main():
         print("RUNNING ANOMALY DETECTION CLASSIFIERS (Scenario 1)")
         print("WITH FEATURE NORMALIZATION")
         print("="*70)
-        
-        run_and_save_per_fold("OCSVM", run_OneClassSVM_per_fold, fold_data, k, sc, out_base)
-        run_and_save_per_fold("LOF", run_LOF_per_fold, fold_data, k, sc, out_base)
-        run_and_save_per_fold("EllipticEnvelope", run_EllipticEnvelope_per_fold, fold_data, k, sc, out_base)
+        ocsvm_grid = {
+            'nu': [0.001], # 0.01, 0.05 
+            'gamma': ['scale'] # 0.1 0.01, 0.001 
+        }
+        run_and_save_per_fold("OCSVM", run_OneClassSVM_per_fold, fold_data, k, sc, out_base, ocsvm_grid)
+        lof_grid = {
+            'n_neighbors': [10],#, 20, 30, 50
+            'metric': ['euclidean'] # 'manhattan'
+        }
+        run_and_save_per_fold("LOF", run_LOF_per_fold, fold_data, k, sc, out_base, lof_grid)
+
+        elliptic_grid = {
+            'contamination': [0.001],# 0.01, 0.05
+            'support_fraction': [None]# 0.7, 0.9
+        }
+        run_and_save_per_fold("EllipticEnvelope", run_EllipticEnvelope_per_fold, fold_data, k, sc, out_base,elliptic_grid)
     else:
         print("\n" + "="*70)
         print(f"RUNNING BINARY CLASSIFIERS (Scenario {sc})")
         print("WITH FEATURE NORMALIZATION")
         print("="*70)
         
-        run_and_save_per_fold("SVM", run_binary_svm_per_fold, fold_data, k, sc, out_base)
-        run_and_save_per_fold("kNN", run_knn_per_fold, fold_data, k, sc, out_base)
-        run_and_save_per_fold("RandomForest", run_random_forest_per_fold, fold_data, k, sc, out_base)
+        svm_grid = {
+            'C': [10.0],#0.1, 1, 
+            'gamma': ['scale'], # 0.01, 0.001
+        }
+        run_and_save_per_fold("SVM", run_binary_svm_per_fold, fold_data, k, sc, out_base, svm_grid)
+        knn_grid = {
+            'n_neighbors': [3],  #, 5, 7, 11  
+            'weights': ['uniform'], # 'distance'
+            'metric': ['euclidean'] #  'manhattan'
+        }
+        run_and_save_per_fold("kNN", run_knn_per_fold, fold_data, k, sc, out_base, knn_grid)
+
+        rf_grid = {
+            'n_estimators': [50],#, 100, 200
+            'max_depth': [5],#, 10, None
+            'min_samples_split': [5] #2,
+        }
+
+        run_and_save_per_fold("RandomForest", run_random_forest_per_fold, fold_data, k, sc, out_base, rf_grid)
     
     # Done
     print(f"\n{'='*70}")

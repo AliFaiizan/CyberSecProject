@@ -51,6 +51,111 @@ def load_and_clean_data(train_files: List[str], test_files: List[str]) -> Tuple[
     print(f"Total attack rows in merged dataset: {attack_count}")
     return merged_dataset
 
+def optimal_param_search_with_folds(fold_data, run_fn, param_grid, scenario_type='oneclass'):
+    """
+    Find optimal hyperparameters using pre-generated fold data.
+    
+    Parameters
+    ----------
+    fold_data : dict
+        Dictionary where keys are fold indices and values are dicts with:
+        - 'Z_train': training features
+        - 'y_train': training labels  
+        - 'Z_test': test features
+        - 'y_test': test labels
+    run_fn : callable
+        Function that takes (Z_train, y_train, Z_test, y_test, params) 
+        and returns (y_pred, model, time, memory)
+    param_grid : dict
+        Dictionary of parameter lists to search over
+    scenario_type : str
+        'oneclass' or 'binary' - determines which metrics to use
+    
+    Returns
+    -------
+    best_params : dict
+        Best parameter combination found
+    results : list
+        List of (params, avg_score) tuples for all combinations
+    """
+    import itertools
+    
+    best_params = None
+    best_score = -1
+    results = []
+    
+    # Create all parameter combinations
+    keys = list(param_grid.keys())
+    values = list(param_grid.values())
+    total_combos = 1
+    for v in values:
+        total_combos *= len(v)
+    
+    print(f"Testing {total_combos} parameter combinations...")
+    
+    combo_num = 0
+    for combo in itertools.product(*values):
+        combo_num += 1
+        params = dict(zip(keys, combo))
+        
+        fold_scores = []
+        
+        # Test on each fold
+        for fold_idx in sorted(fold_data.keys()):
+            Z_train = fold_data[fold_idx]['Z_train']
+            y_train = fold_data[fold_idx]['y_train']
+            Z_test = fold_data[fold_idx]['Z_test']
+            y_test = fold_data[fold_idx]['y_test']
+            
+            # Skip empty folds
+            if Z_train.size == 0 or Z_test.size == 0:
+                continue
+            
+            try:
+                # Run model with these params
+                y_pred, model, clf_time, clf_mem = run_fn(Z_train, y_train, Z_test, y_test, params)
+                
+                # Handle shape mismatch
+                if len(y_pred) != len(y_test):
+                    min_len = min(len(y_pred), len(y_test))
+                    y_pred = y_pred[:min_len]
+                    y_test = y_test[:min_len]
+                
+                # Calculate F1 score
+                tp = ((y_pred == 1) & (y_test == 1)).sum()
+                fp = ((y_pred == 1) & (y_test == 0)).sum()
+                fn = ((y_pred == 0) & (y_test == 1)).sum()
+                
+                precision = tp / (tp + fp + 1e-9)
+                recall = tp / (tp + fn + 1e-9)
+                f1 = 2 * (precision * recall) / (precision + recall + 1e-9)
+                
+                fold_scores.append(f1)
+                
+            except Exception as e:
+                print(f"    Error with params {params} on fold {fold_idx}: {e}")
+                continue
+        
+        # Calculate average score across folds
+        if len(fold_scores) > 0:
+            avg_score = np.mean(fold_scores)
+            results.append((params, avg_score))
+            
+            print(f"  [{combo_num}/{total_combos}] Params {params} → Avg F1 = {avg_score:.4f}")
+            
+            # Keep best
+            if avg_score > best_score:
+                best_score = avg_score
+                best_params = params
+        else:
+            print(f"  [{combo_num}/{total_combos}] Params {params} → No valid folds")
+    
+    print(f"\n{'='*70}")
+    print(f"BEST PARAMS: {best_params}")
+    print(f"BEST F1 SCORE: {best_score:.4f}")
+    print(f"{'='*70}\n")
+    
+    return best_params, results
 
 def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
     """
