@@ -9,7 +9,7 @@ Necessary changes:
 - Shuffle at WINDOW/LATENT level (safe for all scenarios).
 
 Usage:
-  python generate_folds.py -sc 1 -k 5 -M 20 --vae-checkpoint vae_reconstruction_real.pt
+  python generate_folds.py -sc 1 -k 5 -M 20 --vae-checkpoint vae_classification_real.pt
   python generate_folds.py -sc 2 -k 5 -M 20 --vae-checkpoint vae_classification_real.pt
   python generate_folds.py -sc 3 -k 5 -M 20 --vae-checkpoint vae_classification_real.pt
 """
@@ -104,15 +104,15 @@ def load_pretrained_models(vae_checkpoint: str, device: str, F: int = 86):
     vae.load_state_dict(checkpoint["model_state_dict"])
     vae.to(device)
     vae.eval()
-    print("✓ Loaded VAE")
+    print("Loaded VAE")
 
     with open("gan_scaler.pkl", "rb") as f:
         gan_scaler = pickle.load(f)
-    print("✓ Loaded GAN scaler")
+    print("Loaded GAN scaler")
 
     with open("vae_scaler.pkl", "rb") as f:
         vae_scaler = pickle.load(f)
-    print("✓ Loaded VAE scaler")
+    print("Loaded VAE scaler")
 
     return G_normal, G_attack, vae, gan_scaler, vae_scaler, checkpoint
 
