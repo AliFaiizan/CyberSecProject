@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Task Sheet 4 - Task 2: Run Classifiers on Pre-Generated Folds
-FIXED: Added feature normalization and better hyperparameters
+
 
 This script loads pre-generated fold data and runs classifiers.
 """
@@ -20,6 +20,16 @@ from sklearn.neighbors import LocalOutlierFactor, KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 
+# CNN imports
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv1D, BatchNormalization, Activation, Dropout
+from tensorflow.keras.layers import Flatten, Dense, Input
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.utils import to_categorical
+
 process = psutil.Process()
 
 
@@ -32,6 +42,11 @@ def save_model(model, scenario_id, model_name, fold_idx):
     path = f"{out_dir}/{model_name}_Fold{fold_idx+1}.joblib"
     dump(model, path)
 
+def save_cnn_model(model, scenario_id, fold_idx):
+    out_dir = f"saved_models_sheet4/Scenario{scenario_id}"
+    os.makedirs(out_dir, exist_ok=True)
+    path = f"{out_dir}/CNN_Fold{fold_idx+1}.h5"
+    model.save(path)
 
 # =========================================================
 # PER-FOLD CLASSIFIERS WITH NORMALIZATION
@@ -162,11 +177,154 @@ def run_random_forest_per_fold(Z_train, y_train, Z_test, y_test, params):
     
     return y_pred, model, time.time() - start, mem_after - mem_before
 
+def build_cnn_model(input_shape, dropout_rate=0.3, lr=1e-3):
+    """
+    Build CNN with 6 blocks as per Task Sheet 4 requirements:
+    - 4 Conv blocks (each with 2 conv layers + batch norm + activation + dropout)
+    - 2 FC layers
+    - Adam optimizer + categorical cross-entropy
+    """
+    model = Sequential()
+    model.add(Input(shape=input_shape))
+    
+    # ===== BLOCK 1: Conv Block =====
+    model.add(Conv1D(32, 3, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation("relu"))
+    model.add(Dropout(dropout_rate))
+    
+    model.add(Conv1D(32, 3, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation("relu"))
+    model.add(Dropout(dropout_rate))
+    
+    # ===== BLOCK 2: Conv Block =====
+    model.add(Conv1D(64, 3, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation("relu"))
+    model.add(Dropout(dropout_rate))
+    
+    model.add(Conv1D(64, 3, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation("relu"))
+    model.add(Dropout(dropout_rate))
+    
+    # ===== BLOCK 3: Conv Block =====
+    model.add(Conv1D(128, 3, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation("relu"))
+    model.add(Dropout(dropout_rate))
+    
+    model.add(Conv1D(128, 3, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation("relu"))
+    model.add(Dropout(dropout_rate))
+    
+    # ===== BLOCK 4: Conv Block =====
+    model.add(Conv1D(256, 3, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation("relu"))
+    model.add(Dropout(dropout_rate))
+    
+    model.add(Conv1D(256, 3, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation("relu"))
+    model.add(Dropout(dropout_rate))
+    
+    # Flatten before FC layers
+    model.add(Flatten())
+    
+    # ===== BLOCK 5: Fully Connected Layer 1 =====
+    model.add(Dense(128, activation="relu"))
+    model.add(Dropout(dropout_rate))
+    
+    # ===== BLOCK 6: Fully Connected Layer 2 =====
+    model.add(Dense(64, activation="relu"))
+    model.add(Dropout(dropout_rate))
+    
+    # Output layer
+    model.add(Dense(2, activation="softmax"))
+    
+    # Compile with Adam optimizer and categorical cross-entropy
+    model.compile(
+        optimizer=Adam(learning_rate=lr),
+        loss="categorical_crossentropy",
+        metrics=["accuracy"]
+    )
+    
+    return model
+
+
+def run_cnn_per_fold(Z_train, y_train, Z_test, y_test):
+    """Train CNN on latent features"""
+    
+    start = time.time()
+    mem_before = process.memory_info().rss
+    
+    # Normalize features
+    scaler = StandardScaler()
+    Z_train_norm = scaler.fit_transform(Z_train)
+    Z_test_norm = scaler.transform(Z_test)
+    
+    # Reshape for CNN: (samples, timesteps, features)
+    # Treat each latent dimension as a timestep
+    n_features = Z_train_norm.shape[1]
+    Z_train_cnn = Z_train_norm.reshape(len(Z_train_norm), n_features, 1)
+    Z_test_cnn = Z_test_norm.reshape(len(Z_test_norm), n_features, 1)
+    
+    # Convert labels to categorical
+    y_train_cat = to_categorical(y_train, 2)
+    y_test_cat = to_categorical(y_test, 2)
+    
+    # Calculate class weights for imbalance
+    n_normal = np.sum(y_train == 0)
+    n_attack = np.sum(y_train == 1)
+    total = len(y_train)
+    
+    if n_attack > 0:
+        class_weight = {
+            0: total / (2 * n_normal),
+            1: total / (2 * n_attack)
+        }
+    else:
+        class_weight = None
+    
+    # Build CNN model
+    input_shape = (n_features, 1)
+    model = build_cnn_model(input_shape, dropout_rate=0.3, lr=1e-3)
+    
+    # Train with early stopping
+    callbacks = [
+        EarlyStopping(
+            monitor="val_loss", 
+            patience=5, 
+            restore_best_weights=True
+        )
+    ]
+    
+    model.fit(
+        Z_train_cnn, y_train_cat,
+        validation_data=(Z_test_cnn, y_test_cat),
+        epochs=30,
+        batch_size=128,
+        class_weight=class_weight,
+        verbose=0,
+        callbacks=callbacks
+    )
+    
+    mem_after = process.memory_info().rss
+    
+    # Predict
+    y_pred_proba = model.predict(Z_test_cnn, verbose=0)
+    y_pred = np.argmax(y_pred_proba, axis=1)
+    
+    return y_pred, model, time.time() - start, mem_after - mem_before
+
 
 # =========================================================
 # RUN AND SAVE RESULTS
 # =========================================================
-def run_and_save_per_fold(model_name, run_fn, fold_data, k, scenario_id, out_base, param_grid=None):
+def run_and_save_per_fold(model_name, run_fn, fold_data, k, scenario_id, out_base, param_grid=None, is_cnn=False):
     """Run classifier on pre-split fold data"""
     from utils2 import optimal_param_search_with_folds
     model_dir = os.path.join(out_base, model_name)
@@ -227,8 +385,11 @@ def run_and_save_per_fold(model_name, run_fn, fold_data, k, scenario_id, out_bas
             "Attack": y_test
         }).to_csv(f"{model_dir}/Predictions_Fold{fold_idx+1}.csv", index=False)
         
-        # Save model
-        save_model(model, scenario_id, model_name, fold_idx)
+         # Save model
+        if is_cnn:
+            save_cnn_model(model, scenario_id, fold_idx)
+        else:
+            save_model(model, scenario_id, model_name, fold_idx)
         
         rows.append({
             "fold": fold_idx + 1,
@@ -281,9 +442,9 @@ def main():
     print("="*70)
     
     if not os.path.exists(fold_data_dir):
-        print(f"\n❌ ERROR: Fold data directory not found: {fold_data_dir}")
+        print(f"\nERROR: Fold data directory not found: {fold_data_dir}")
         print("\nPlease generate fold data first using:")
-        print(f"  python generate_folds_FIXED.py -sc {sc} -k {k} -M 20 --vae-checkpoint vae_XXX_real.pt")
+        print(f"  python generate_folds.py -sc {sc} -k {k} -M 20 --vae-checkpoint vae_XXX_real.pt")
         return
     
     fold_data = {}
@@ -360,6 +521,13 @@ def main():
         }
 
         run_and_save_per_fold("RandomForest", run_random_forest_per_fold, fold_data, k, sc, out_base, rf_grid)
+
+         # CNN for Scenarios 2 & 3
+        print("\n" + "="*70)
+        print(f"RUNNING CNN CLASSIFIER (Scenario {sc})")
+        print("CNN Architecture: 6 blocks (4 conv + 2 FC)")
+        print("="*70)
+        run_and_save_per_fold("CNN", run_cnn_per_fold, fold_data, k, sc, out_base, is_cnn=True)
     
     # Done
     print(f"\n{'='*70}")
