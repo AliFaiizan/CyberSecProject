@@ -363,6 +363,18 @@ def main():
                 X_train_raw = np.clip(X_train_raw, real_min, real_max)
 
         # Scale synthetic (or empty)
+        X_test_fold = X_real[test_idx]
+        y_test_fold = y_real[test_idx]
+        
+        if (sc == 1):
+            # Save raw synthetic train and real test fold before VAE for Scenario 1
+            raw_dir = f"{fold_data_dir}/syn_fold{fold_idx}"
+            os.makedirs(raw_dir, exist_ok=True)
+            np.save(f"{raw_dir}/train_raw.npy", X_train_raw.astype(np.float32))
+            np.save(f"{raw_dir}/train_raw_labels.npy", y_train_ts.astype(np.int32))
+            np.save(f"{raw_dir}/test_raw.npy", X_test_fold.astype(np.float32))
+            np.save(f"{raw_dir}/test_raw_labels.npy", y_test_fold.astype(np.int32))
+
         X_train_scaled = vae_scaler.transform(X_train_raw) if len(X_train_raw) > 0 else X_train_raw
 
         # -----------------------
@@ -372,8 +384,6 @@ def main():
 
         Z_train = extract_vae_latent_simple(X_train_scaled, vae, M, layer_type, device)
 
-        X_test_fold = X_real[test_idx]
-        y_test_fold = y_real[test_idx]
         Z_test = extract_vae_latent_simple(X_test_fold, vae, M, layer_type, device)
 
         # Window labels

@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from glob import glob
 
-# Import from your Task Sheet 3 VAE code
+# Importing VAE code
 from task1 import (
     VAE,
     train_vae_reconstruction,
@@ -195,7 +195,7 @@ def main():
     test_files = sorted(glob("../datasets/hai-22.04/test1.csv"))
     
     if not train_files or not test_files:
-        print("\n❌ ERROR: HAI-22.04 dataset not found!")
+        print("\n ERROR: HAI-22.04 dataset not found!")
         print("Expected location: ../datasets/hai-22.04/")
         print("\nPlease ensure you have:")
         print("  - ../datasets/hai-22.04/train1.csv")
