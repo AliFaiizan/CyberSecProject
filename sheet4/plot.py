@@ -16,7 +16,7 @@ sns.set_palette("husl")
 def plot_comparative_metrics(scenario, base_dir="exports_sheet4"):
 
     if scenario == 1:
-        models = ["OCSVM", "LOF", "EllipticEnvelope", "NGRAM_N2", "NGRAM_N5", "NGRAM_N8"]
+        models = ["OCSVM", "LOF", "EllipticEnvelope", "NGRAM_N2", "NGRAM_N5", "NGRAM_N8", "syn_NGRAM_N2", "syn_NGRAM_N5", "syn_NGRAM_N8"]
     else:
         models = ["SVM", "kNN", "RandomForest", "CNN"]
 
@@ -79,13 +79,37 @@ def plot_comparative_metrics(scenario, base_dir="exports_sheet4"):
             recalls.append(np.mean(fold_rec))
             continue
 
+        if label.startswith("syn_NGRAM_"):
+            N = label.split("_")[2]  # N2 / N5 / N8
+            fold_precisions, fold_recalls = [], []
+
+            for fold_idx in range(1, 6):
+                path = f"{base_dir}/Scenario{scenario}/syn_NGRAM/Predictions_{N}_Fold{fold_idx}.csv"
+                if not os.path.exists(path):
+                    continue
+
+                df = pd.read_csv(path)
+                pred, true = df["predicted_label"].values, df["Attack"].values
+
+                tp = ((pred == 1) & (true == 1)).sum()
+                fp = ((pred == 1) & (true == 0)).sum()
+                fn = ((pred == 0) & (true == 1)).sum()
+
+                precision = tp / (tp + fp + 1e-9)
+                recall = tp / (tp + fn + 1e-9)
+
+                fold_precisions.append(precision)
+                fold_recalls.append(recall)
+
+            precisions.append(np.mean(fold_precisions))
+            recalls.append(np.mean(fold_recalls))
+            continue
         # ===============================
         # ML / CNN MODELS
         # ===============================
         metrics_path = f"{base_dir}/Scenario{scenario}/{label}/metrics_summary.csv"
 
         if not os.path.exists(metrics_path):
-            print(f"[WARNING] Missing metrics for {label} in Scenario {scenario}")
             precisions.append(0)
             recalls.append(0)
             continue
@@ -120,7 +144,7 @@ def plot_comparative_metrics(scenario, base_dir="exports_sheet4"):
 # ==========================================================================================
 # 2) RUNTIME / MEMORY
 # ==========================================================================================
-def plot_runtime_memory(scenario, base_dir="exports_sheet4"):
+def plot_runtime_memory(scenario, base_dir="exports"):
 
     if scenario == 1:
         models = ["OCSVM", "LOF", "EllipticEnvelope"]
@@ -154,7 +178,7 @@ def plot_runtime_memory(scenario, base_dir="exports_sheet4"):
 # ==========================================================================================
 # 3) FOLD-WISE PERFORMANCE
 # ==========================================================================================
-def plot_fold_performance(scenario, base_dir="exports_sheet4"):
+def plot_fold_performance(scenario, base_dir="exports"):
 
     if scenario == 1:
         models = ["OCSVM", "LOF", "EllipticEnvelope"]
@@ -184,7 +208,7 @@ def plot_fold_performance(scenario, base_dir="exports_sheet4"):
 # ==========================================================================================
 # 4) ENSEMBLE COMPARISON
 # ==========================================================================================
-def plot_ensemble_comparison(scenario, base_dir="exports_sheet4"):
+def plot_ensemble_comparison(scenario, base_dir="exports"):
 
     ensemble_dir = f"{base_dir}/Scenario{scenario}/Ensemble"
     methods = ["random", "majority", "all"]
@@ -225,7 +249,6 @@ def plot_ensemble_comparison(scenario, base_dir="exports_sheet4"):
 def generate_all_plots(scenarios=[1, 2, 3], base_dir="exports_sheet4"):
     for sc in scenarios:
         plot_comparative_metrics(sc, base_dir)
-        # plot_runtime_memory(sc, base_dir)
         plot_fold_performance(sc, base_dir)
         plot_ensemble_comparison(sc, base_dir)
     print("All plots generated successfully!")

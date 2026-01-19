@@ -13,25 +13,15 @@ import psutil
 import numpy as np
 import pandas as pd
 from joblib import dump
-from sklearn import svm
-from sklearn.svm import OneClassSVM, SVC
-from sklearn.covariance import EllipticEnvelope
-from sklearn.neighbors import LocalOutlierFactor, KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 
-# CNN imports
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv1D, BatchNormalization, Activation, Dropout
-from tensorflow.keras.layers import Flatten, Dense, Input
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.utils import to_categorical
+from models import run_binary_svm_per_fold, run_knn_per_fold, run_random_forest_per_fold
+from models import run_OneClassSVM_per_fold, run_LOF_per_fold, run_EllipticEnvelope_per_fold
+from models import run_cnn_per_fold
+
+
 
 process = psutil.Process()
-
 
 # =========================================================
 # SAVE MODEL
@@ -47,278 +37,6 @@ def save_cnn_model(model, scenario_id, fold_idx):
     os.makedirs(out_dir, exist_ok=True)
     path = f"{out_dir}/CNN_Fold{fold_idx+1}.h5"
     model.save(path)
-
-# =========================================================
-# PER-FOLD CLASSIFIERS WITH NORMALIZATION
-# =========================================================
-def run_OneClassSVM_per_fold(Z_train, y_train, Z_test, y_test, params):
-    """Train OCSVM with feature normalization"""
-    
-    # CRITICAL FIX: Normalize features to handle distribution mismatch
-    scaler = StandardScaler()
-    Z_train_norm = scaler.fit_transform(Z_train)
-    Z_test_norm = scaler.transform(Z_test)
-    
-    # Better hyperparameters
-    model = OneClassSVM(kernel="rbf", nu=0.001, gamma='auto')
-    
-    start = time.time()
-    mem_before = process.memory_info().rss
-    model.fit(Z_train_norm)
-    mem_after = process.memory_info().rss
-    
-    y_pred_raw = model.predict(Z_test_norm)
-    y_pred = np.where(y_pred_raw == -1, 1, 0)
-    
-    return y_pred, model, time.time() - start, mem_after - mem_before
-
-
-def run_LOF_per_fold(Z_train, y_train, Z_test, y_test,params):
-    """Train LOF with feature normalization"""
-    
-    # Normalize features
-    scaler = StandardScaler()
-    Z_train_norm = scaler.fit_transform(Z_train)
-    Z_test_norm = scaler.transform(Z_test)
-    
-    # Better hyperparameters
-    model = LocalOutlierFactor(n_neighbors=20, metric='euclidean', novelty=True)
-    
-    start = time.time()
-    mem_before = process.memory_info().rss
-    model.fit(Z_train_norm)
-    mem_after = process.memory_info().rss
-    
-    y_pred_raw = model.predict(Z_test_norm)
-    y_pred = np.where(y_pred_raw == -1, 1, 0)
-    
-    return y_pred, model, time.time() - start, mem_after - mem_before
-
-
-def run_EllipticEnvelope_per_fold(Z_train, y_train, Z_test, y_test,params):
-    """Train EllipticEnvelope with feature normalization"""
-    
-    # Normalize features
-    scaler = StandardScaler()
-    Z_train_norm = scaler.fit_transform(Z_train)
-    Z_test_norm = scaler.transform(Z_test)
-    
-    # Better hyperparameters
-    model = EllipticEnvelope(contamination=0.01, random_state=42)
-    
-    start = time.time()
-    mem_before = process.memory_info().rss
-    model.fit(Z_train_norm)
-    mem_after = process.memory_info().rss
-    
-    y_pred_raw = model.predict(Z_test_norm)
-    y_pred = np.where(y_pred_raw == -1, 1, 0)
-    
-    return y_pred, model, time.time() - start, mem_after - mem_before
-
-
-def run_binary_svm_per_fold(Z_train, y_train, Z_test, y_test,params):
-    """Train SVM with feature normalization"""
-    
-    # Normalize features
-    scaler = StandardScaler()
-    Z_train_norm = scaler.fit_transform(Z_train)
-    Z_test_norm = scaler.transform(Z_test)
-    
-    model = SVC(kernel="rbf", C=10.0, gamma='scale')
-    
-    start = time.time()
-    mem_before = process.memory_info().rss
-    model.fit(Z_train_norm, y_train)
-    mem_after = process.memory_info().rss
-    
-    y_pred = model.predict(Z_test_norm)
-    
-    return y_pred, model, time.time() - start, mem_after - mem_before
-
-
-def run_knn_per_fold(Z_train, y_train, Z_test, y_test,params):
-    """Train kNN with feature normalization"""
-    
-    # Normalize features
-    scaler = StandardScaler()
-    Z_train_norm = scaler.fit_transform(Z_train)
-    Z_test_norm = scaler.transform(Z_test)
-    
-    model = KNeighborsClassifier(n_neighbors=3, weights='uniform', metric='euclidean')
-    
-    start = time.time()
-    mem_before = process.memory_info().rss
-    model.fit(Z_train_norm, y_train)
-    mem_after = process.memory_info().rss
-    
-    y_pred = model.predict(Z_test_norm)
-    
-    return y_pred, model, time.time() - start, mem_after - mem_before
-
-
-def run_random_forest_per_fold(Z_train, y_train, Z_test, y_test, params):
-    """Train RandomForest with feature normalization"""
-    
-    # Normalize features
-    scaler = StandardScaler()
-    Z_train_norm = scaler.fit_transform(Z_train)
-    Z_test_norm = scaler.transform(Z_test)
-    
-    model = RandomForestClassifier(n_estimators=50, max_depth=5, min_samples_split=5, 
-                                   random_state=42, n_jobs=-1)
-    
-    start = time.time()
-    mem_before = process.memory_info().rss
-    model.fit(Z_train_norm, y_train)
-    mem_after = process.memory_info().rss
-    
-    y_pred = model.predict(Z_test_norm)
-    
-    return y_pred, model, time.time() - start, mem_after - mem_before
-
-def build_cnn_model(input_shape, dropout_rate=0.3, lr=1e-3):
-    """
-    Build CNN with 6 blocks as per Task Sheet 4 requirements:
-    - 4 Conv blocks (each with 2 conv layers + batch norm + activation + dropout)
-    - 2 FC layers
-    - Adam optimizer + categorical cross-entropy
-    """
-    model = Sequential()
-    model.add(Input(shape=input_shape))
-    
-    # ===== BLOCK 1: Conv Block =====
-    model.add(Conv1D(32, 3, padding="same"))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(Dropout(dropout_rate))
-    
-    model.add(Conv1D(32, 3, padding="same"))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(Dropout(dropout_rate))
-    
-    # ===== BLOCK 2: Conv Block =====
-    model.add(Conv1D(64, 3, padding="same"))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(Dropout(dropout_rate))
-    
-    model.add(Conv1D(64, 3, padding="same"))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(Dropout(dropout_rate))
-    
-    # ===== BLOCK 3: Conv Block =====
-    model.add(Conv1D(128, 3, padding="same"))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(Dropout(dropout_rate))
-    
-    model.add(Conv1D(128, 3, padding="same"))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(Dropout(dropout_rate))
-    
-    # ===== BLOCK 4: Conv Block =====
-    model.add(Conv1D(256, 3, padding="same"))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(Dropout(dropout_rate))
-    
-    model.add(Conv1D(256, 3, padding="same"))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(Dropout(dropout_rate))
-    
-    # Flatten before FC layers
-    model.add(Flatten())
-    
-    # ===== BLOCK 5: Fully Connected Layer 1 =====
-    model.add(Dense(128, activation="relu"))
-    model.add(Dropout(dropout_rate))
-    
-    # ===== BLOCK 6: Fully Connected Layer 2 =====
-    model.add(Dense(64, activation="relu"))
-    model.add(Dropout(dropout_rate))
-    
-    # Output layer
-    model.add(Dense(2, activation="softmax"))
-    
-    # Compile with Adam optimizer and categorical cross-entropy
-    model.compile(
-        optimizer=Adam(learning_rate=lr),
-        loss="categorical_crossentropy",
-        metrics=["accuracy"]
-    )
-    
-    return model
-
-
-def run_cnn_per_fold(Z_train, y_train, Z_test, y_test):
-    """Train CNN on latent features"""
-    
-    start = time.time()
-    mem_before = process.memory_info().rss
-    
-    # Normalize features
-    scaler = StandardScaler()
-    Z_train_norm = scaler.fit_transform(Z_train)
-    Z_test_norm = scaler.transform(Z_test)
-    
-    # Reshape for CNN: (samples, timesteps, features)
-    # Treat each latent dimension as a timestep
-    n_features = Z_train_norm.shape[1]
-    Z_train_cnn = Z_train_norm.reshape(len(Z_train_norm), n_features, 1)
-    Z_test_cnn = Z_test_norm.reshape(len(Z_test_norm), n_features, 1)
-    
-    # Convert labels to categorical
-    y_train_cat = to_categorical(y_train, 2)
-    y_test_cat = to_categorical(y_test, 2)
-    
-    # Calculate class weights for imbalance
-    n_normal = np.sum(y_train == 0)
-    n_attack = np.sum(y_train == 1)
-    total = len(y_train)
-    
-    if n_attack > 0:
-        class_weight = {
-            0: total / (2 * n_normal),
-            1: total / (2 * n_attack)
-        }
-    else:
-        class_weight = None
-    
-    # Build CNN model
-    input_shape = (n_features, 1)
-    model = build_cnn_model(input_shape, dropout_rate=0.3, lr=1e-3)
-    
-    # Train with early stopping
-    callbacks = [
-        EarlyStopping(
-            monitor="val_loss", 
-            patience=5, 
-            restore_best_weights=True
-        )
-    ]
-    
-    model.fit(
-        Z_train_cnn, y_train_cat,
-        validation_data=(Z_test_cnn, y_test_cat),
-        epochs=30,
-        batch_size=128,
-        class_weight=class_weight,
-        verbose=0,
-        callbacks=callbacks
-    )
-    
-    mem_after = process.memory_info().rss
-    
-    # Predict
-    y_pred_proba = model.predict(Z_test_cnn, verbose=0)
-    y_pred = np.argmax(y_pred_proba, axis=1)
-    
-    return y_pred, model, time.time() - start, mem_after - mem_before
 
 
 # =========================================================
@@ -336,7 +54,7 @@ def run_and_save_per_fold(model_name, run_fn, fold_data, k, scenario_id, out_bas
     
     rows = []
     
-    #her i want to check optimal params. runfn is the model runing function, the pass that best paras main run function
+    
     best_params = None
     if param_grid is not None:
         print(f"\nPerforming hyperparameter search for {model_name}...")
@@ -466,10 +184,10 @@ def main():
             
             print(f"  Fold {fold_idx + 1}: train {Z_train.shape}, test {Z_test.shape}")
         except Exception as e:
-            print(f"  ⚠ Error loading fold {fold_idx}: {e}")
+            print(f"  Error loading fold {fold_idx}: {e}")
             continue
     
-    print("\n✓ All fold data loaded")
+    print("\n -> All fold data loaded")
     
     # Run classifiers
     out_base = f"exports_sheet4/Scenario{sc}"
@@ -486,7 +204,7 @@ def main():
         }
         run_and_save_per_fold("OCSVM", run_OneClassSVM_per_fold, fold_data, k, sc, out_base, ocsvm_grid)
         lof_grid = {
-            'n_neighbors': [10],#, 20, 30, 50
+            'n_neighbors': [20],#, 20, 30, 50
             'metric': ['euclidean'] # 'manhattan'
         }
         run_and_save_per_fold("LOF", run_LOF_per_fold, fold_data, k, sc, out_base, lof_grid)
@@ -522,7 +240,7 @@ def main():
 
         run_and_save_per_fold("RandomForest", run_random_forest_per_fold, fold_data, k, sc, out_base, rf_grid)
 
-         # CNN for Scenarios 2 & 3
+        # CNN for Scenarios 2 & 3
         print("\n" + "="*70)
         print(f"RUNNING CNN CLASSIFIER (Scenario {sc})")
         print("CNN Architecture: 6 blocks (4 conv + 2 FC)")

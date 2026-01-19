@@ -2,16 +2,8 @@
 """
 Generate and save fold data for Task Sheet 4 - Task 2
 
-Necessary changes:
-- Scenario 1: allow timestep shuffle (improves window diversity; reduces FP for one-class models).
-- Scenario 2/3: DO NOT shuffle timesteps (prevents unrealistic mixed windows).
-- Clip synthetic raw features to real min/max ONLY for Scenario 2/3 (reduces domain shift).
-- Shuffle at WINDOW/LATENT level (safe for all scenarios).
-
 Usage:
-  python generate_folds.py -sc 1 -k 5 -M 20 --vae-checkpoint vae_reconstruction_real.pt
-  python generate_folds.py -sc 2 -k 5 -M 20 --vae-checkpoint vae_classification_real.pt
-  python generate_folds.py -sc 3 -k 5 -M 20 --vae-checkpoint vae_classification_real.pt
+  python generate_folds.py -sc 1 -k 5 -M 20 --vae-checkpoint vae_classification_real.pt
 """
 
 import argparse
@@ -85,9 +77,9 @@ def load_pretrained_models(vae_checkpoint: str, device: str, F: int = 86):
     G_normal.load_state_dict(torch.load("G_normal.pt", map_location=device))
     G_attack.load_state_dict(torch.load("G_attack.pt", map_location=device))
 
-    G_normal.eval()
+    G_normal.eval() # behave consistently and not apply random dropout or update batch norm statistics.
     G_attack.eval()
-    print("✓ Loaded GAN generators")
+    print("Loaded GAN generators")
 
     print(f"Loading VAE from: {vae_checkpoint}")
     checkpoint = torch.load(vae_checkpoint, map_location=device)
@@ -104,15 +96,15 @@ def load_pretrained_models(vae_checkpoint: str, device: str, F: int = 86):
     vae.load_state_dict(checkpoint["model_state_dict"])
     vae.to(device)
     vae.eval()
-    print("✓ Loaded VAE")
+    print("Loaded VAE")
 
     with open("gan_scaler.pkl", "rb") as f:
         gan_scaler = pickle.load(f)
-    print("✓ Loaded GAN scaler")
+    print("Loaded GAN scaler")
 
     with open("vae_scaler.pkl", "rb") as f:
         vae_scaler = pickle.load(f)
-    print("✓ Loaded VAE scaler")
+    print("Loaded VAE scaler")
 
     return G_normal, G_attack, vae, gan_scaler, vae_scaler, checkpoint
 
@@ -311,7 +303,7 @@ def main():
     else:
         scenario_fn = scenario_3_split
 
-    normal_block_len = args.normal_block_len if args.normal_block_len > 0 else max(10 * M, 200)
+    normal_block_len = args.normal_block_len if args.normal_block_len > 0 else max(10 * M, 200) # longer blocks make the synthetic sequence more realistic
     attack_block_len = args.attack_block_len if args.attack_block_len > 0 else max(10 * M, 200)
     use_blocks = (not args.no_blocks)
 
@@ -337,7 +329,7 @@ def main():
             print(f"    Generating {n_normal} NORMAL synthetic samples (Scenario 1)")
 
             Xn_norm = generate_synthetic(G_normal, n_normal, device)
-            X_train_raw = gan_scaler.inverse_transform(Xn_norm)
+            X_train_raw = gan_scaler.inverse_transform(Xn_norm) # fitted on the real data before training the GAN.
             X_train_raw = fix_synthetic_data(X_train_raw)
             y_train_ts = np.zeros(n_normal, dtype=int)
 
@@ -363,6 +355,18 @@ def main():
                 X_train_raw = np.clip(X_train_raw, real_min, real_max)
 
         # Scale synthetic (or empty)
+        X_test_fold = X_real[test_idx]
+        y_test_fold = y_real[test_idx]
+        
+        if (sc == 1):
+            # Save raw synthetic train and real test fold before VAE for Scenario 1
+            raw_dir = f"{fold_data_dir}/syn_fold{fold_idx}"
+            os.makedirs(raw_dir, exist_ok=True)
+            np.save(f"{raw_dir}/train_raw.npy", X_train_raw.astype(np.float32))
+            np.save(f"{raw_dir}/train_raw_labels.npy", y_train_ts.astype(np.int32))
+            np.save(f"{raw_dir}/test_raw.npy", X_test_fold.astype(np.float32))
+            np.save(f"{raw_dir}/test_raw_labels.npy", y_test_fold.astype(np.int32))
+
         X_train_scaled = vae_scaler.transform(X_train_raw) if len(X_train_raw) > 0 else X_train_raw
 
         # -----------------------
@@ -372,8 +376,6 @@ def main():
 
         Z_train = extract_vae_latent_simple(X_train_scaled, vae, M, layer_type, device)
 
-        X_test_fold = X_real[test_idx]
-        y_test_fold = y_real[test_idx]
         Z_test = extract_vae_latent_simple(X_test_fold, vae, M, layer_type, device)
 
         # Window labels
