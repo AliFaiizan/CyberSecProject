@@ -51,7 +51,7 @@ def run_shap_for_model(
     # -----------------------------------------------------
     if model_name == "RF":
         explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X_test_flat[:10000])  # REMOVE Limit to 100 samples for speed
+        shap_values = explainer.shap_values(X_test_flat[:5000])  # REMOVE Limit to 100 samples for speed
 
         # TreeExplainer can return list [class0, class1] or 3D array
         # Select attack class (index 1)
@@ -116,7 +116,7 @@ def run_shap_for_model(
         background = shap.sample(X_train_flat, 50)
         print(f"[DEBUG OCSVM] Background shape: {background.shape}, X_train_flat: {X_train_flat.shape}")
         explainer  = shap.KernelExplainer(lambda x: anomaly_to_prob(model, x), background)
-        shap_values = explainer.shap_values(X_test_flat[:10000])  # REMOVE Limit to 1000 samples for speed
+        shap_values = explainer.shap_values(X_test_flat[:5000])  # REMOVE Limit to 1000 samples for speed
         print(f"[DEBUG OCSVM] SHAP values shape: {shap_values[0].shape if isinstance(shap_values, list) else shap_values.shape}")
         
         # For binary classification, select attack class (index 1)

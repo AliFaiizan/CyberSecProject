@@ -311,7 +311,7 @@ def main():
     else:
         scenario_fn = scenario_3_split
 
-    normal_block_len = args.normal_block_len if args.normal_block_len > 0 else max(10 * M, 200)
+    normal_block_len = args.normal_block_len if args.normal_block_len > 0 else max(10 * M, 200) # longer blocks make the synthetic sequence more realistic
     attack_block_len = args.attack_block_len if args.attack_block_len > 0 else max(10 * M, 200)
     use_blocks = (not args.no_blocks)
 
@@ -337,7 +337,7 @@ def main():
             print(f"    Generating {n_normal} NORMAL synthetic samples (Scenario 1)")
 
             Xn_norm = generate_synthetic(G_normal, n_normal, device)
-            X_train_raw = gan_scaler.inverse_transform(Xn_norm)
+            X_train_raw = gan_scaler.inverse_transform(Xn_norm) # fitted on the real data before training the GAN.
             X_train_raw = fix_synthetic_data(X_train_raw)
             y_train_ts = np.zeros(n_normal, dtype=int)
 
