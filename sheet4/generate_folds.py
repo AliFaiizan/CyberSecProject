@@ -85,7 +85,7 @@ def load_pretrained_models(vae_checkpoint: str, device: str, F: int = 86):
     G_normal.load_state_dict(torch.load("G_normal.pt", map_location=device))
     G_attack.load_state_dict(torch.load("G_attack.pt", map_location=device))
 
-    G_normal.eval()
+    G_normal.eval() # behave consistently and not apply random dropout or update batch norm statistics.
     G_attack.eval()
     print("✓ Loaded GAN generators")
 

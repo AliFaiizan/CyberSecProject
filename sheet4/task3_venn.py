@@ -204,7 +204,7 @@ def generate_comparison_summary(sheet3_dir, sheet4_dir, scenario, fold, ngram_n=
 def main():
     parser = argparse.ArgumentParser(description="Task 3a: Generate Venn/UpSet plots for error analysis")
     parser.add_argument("--sheet3_dir", default="../tasksheet3/exports", help="Path to Sheet 3 exports (real data)")
-    parser.add_argument("--sheet4_dir", default="./exports", help="Path to Sheet 4 exports (synthetic data)")
+    parser.add_argument("--sheet4_dir", default="./exports_sheet4", help="Path to Sheet 4 exports (synthetic data)")
     parser.add_argument("--scenario", type=int, required=True, choices=[1, 2, 3], help="Scenario number")
     parser.add_argument("--fold", type=int, required=True, help="Fold number")
     parser.add_argument("--ngram_n", type=int, default=2, choices=[2, 5, 8], help="N-gram size (Scenario 1 only)")

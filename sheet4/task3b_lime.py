@@ -50,7 +50,7 @@ def run_lime_for_model(model_name, model, X_train, X_test, output_dir, predict_f
     
     print(f"[LIME] Running on {len(X_test)} samples for {model_name}...")
     
-    for idx in range(len(X_test[:1000])): # REMOVE Limit to 1000 samples for speed
+    for idx in range(len(X_test)): 
         exp = explainer.explain_instance(
             X_test[idx],
             predict_fn,
@@ -196,7 +196,7 @@ def run_task3_b(scenario, fold_idx=0):
             "RandomForest":  f"{model_dir}/RandomForest_Fold{fold_num}.joblib"
         }
 
-        # ML MODELS
+        #ML MODELS
         for name, path in ml_models.items():
             if not os.path.exists(path):
                 print(f"[WARN] Missing ML model: {path}")
