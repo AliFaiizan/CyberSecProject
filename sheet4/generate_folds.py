@@ -2,16 +2,8 @@
 """
 Generate and save fold data for Task Sheet 4 - Task 2
 
-Necessary changes:
-- Scenario 1: allow timestep shuffle (improves window diversity; reduces FP for one-class models).
-- Scenario 2/3: DO NOT shuffle timesteps (prevents unrealistic mixed windows).
-- Clip synthetic raw features to real min/max ONLY for Scenario 2/3 (reduces domain shift).
-- Shuffle at WINDOW/LATENT level (safe for all scenarios).
-
 Usage:
   python generate_folds.py -sc 1 -k 5 -M 20 --vae-checkpoint vae_classification_real.pt
-  python generate_folds.py -sc 2 -k 5 -M 20 --vae-checkpoint vae_classification_real.pt
-  python generate_folds.py -sc 3 -k 5 -M 20 --vae-checkpoint vae_classification_real.pt
 """
 
 import argparse
@@ -87,7 +79,7 @@ def load_pretrained_models(vae_checkpoint: str, device: str, F: int = 86):
 
     G_normal.eval() # behave consistently and not apply random dropout or update batch norm statistics.
     G_attack.eval()
-    print("✓ Loaded GAN generators")
+    print("Loaded GAN generators")
 
     print(f"Loading VAE from: {vae_checkpoint}")
     checkpoint = torch.load(vae_checkpoint, map_location=device)

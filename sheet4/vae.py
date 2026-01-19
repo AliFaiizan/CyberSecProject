@@ -146,7 +146,7 @@ def train_vae_for_mode(mode, X, y, M, F, device):
             device=device, epochs=epochs, lr=1e-3
         )
     
-    print(f"✓ Training complete! Best val loss: {result['best_val_loss']:.6f}")
+    print(f"Training complete! Best val loss: {result['best_val_loss']:.6f}")
     
     # ==========================================
     # Prepare checkpoint
@@ -170,9 +170,6 @@ def main():
     print("\n" + "="*70)
     print("TRAINING VAEs FOR TASK SHEET 4")
     print("="*70)
-    print("\nThis trains TWO VAEs on REAL HAI-22.04 data:")
-    print("  1. Reconstruction VAE → for Scenario 1")
-    print("  2. Classification VAE → for Scenarios 2 & 3")
     print("\nThese VAEs will extract features from:")
     print("  - Synthetic data (GAN-generated) for training")
     print("  - Real data for testing")
@@ -220,17 +217,14 @@ def main():
     print("\nNormalizing REAL data...")
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
-    print("✓ Normalized using StandardScaler")
+    print("Normalized using StandardScaler")
     
     # Save the scaler (will be used for synthetic data too)
     import pickle
     with open('vae_scaler.pkl', 'wb') as f:
         pickle.dump(scaler, f)
-    print("✓ Saved scaler to vae_scaler.pkl")
-    
-    # ==========================================
-    # Train Reconstruction VAE (Scenario 1)
-    # ==========================================
+    print("Saved scaler to vae_scaler.pkl")
+
     model_recon, checkpoint_recon = train_vae_for_mode(
         "reconstruction", X, y, M, F, device
     )
@@ -239,9 +233,6 @@ def main():
     torch.save(checkpoint_recon, save_path_recon)
     print(f"\n✓ Saved to: {save_path_recon}")
     
-    # ==========================================
-    # Train Classification VAE (Scenarios 2 & 3)
-    # ==========================================
     model_class, checkpoint_class = train_vae_for_mode(
         "classification", X, y, M, F, device
     )
