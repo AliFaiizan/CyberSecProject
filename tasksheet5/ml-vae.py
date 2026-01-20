@@ -227,8 +227,8 @@ def main():
     if sc == 1:
         scenario_fn = scenario_1_split
         model_map = {
-            # "OCSVM": run_OneClassSVM,
-            # "LOF": run_LOF,
+            "OCSVM": run_OneClassSVM,
+            "LOF": run_LOF,
             "EllipticEnvelope": run_EllipticEnvelope
         }
     else:
