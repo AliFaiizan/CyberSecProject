@@ -45,7 +45,7 @@ def ensemble(preds_list, method):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--scenario", type=int, required=True, choices=[1,2,3])
-    parser.add_argument("--base", default="exports_sheet4")
+    parser.add_argument("--base", default="exports")
     parser.add_argument("-k", "--folds", type=int, default=5)
     args = parser.parse_args()
 
