@@ -52,7 +52,7 @@ def load_and_clean_data(train_files: List[str], test_files: List[str]) -> Tuple[
     return merged_dataset
 
 
-def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
+def optimal_param_search(X, y,k, scenario_fn, model_builder, param_grid):
     """
     model_builder(params) → returns a model instance
     param_grid = dict of lists
@@ -76,7 +76,7 @@ def optimal_param_search(X, y, scenario_fn, model_builder, param_grid):
 
         fold_scores = []
 
-        for res in scenario_fn(X, y):
+        for res in scenario_fn(X, y,k):
             if(len(res) == 3):
                 fold_idx, train_idx, test_idx = res
                 X_train = X.iloc[train_idx]

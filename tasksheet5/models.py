@@ -44,7 +44,7 @@ def run_OneClassSVM(X, y, k, scenario_fn):
     def build_model(params): 
         return OneClassSVM(kernel="rbf", **params)
 
-    best_params, _ = optimal_param_search(X, y, scenario_fn, build_model, param_grid)
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     print("Best OCSVM params:", best_params)
 
     all_results = []
@@ -66,9 +66,9 @@ def run_OneClassSVM(X, y, k, scenario_fn):
         (_, clf_time, clf_mem) = measure_classification_step(
             lambda: model.fit(X_train_red)
         )
-
         y_pred_raw = model.predict(X_test_red)
         y_pred = np.where(y_pred_raw == -1, 1, 0)
+        print("Model prediction complete for fold", fold_idx)
 
         all_results.append(
             (fold_idx, test_idx, y_pred, y_test, model,
@@ -87,7 +87,7 @@ def run_EllipticEnvelope(X, y, k, scenario_fn):
     def build_model(params): 
         return EllipticEnvelope(**params, random_state=42)
 
-    best_params, _ = optimal_param_search(X, y, scenario_fn, build_model, param_grid)
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     print("Best EE params:", best_params)
 
     all_results = []
@@ -109,6 +109,7 @@ def run_EllipticEnvelope(X, y, k, scenario_fn):
         )
 
         y_pred_raw = model.predict(X_test_red)
+        print("Model prediction complete for fold", fold_idx)
         y_pred = np.where(y_pred_raw == -1, 1, 0)
 
         all_results.append(
@@ -128,7 +129,7 @@ def run_LOF(X, y, k, scenario_fn):
     def build_model(params): 
         return LocalOutlierFactor(novelty=True, **params)
 
-    best_params, _ = optimal_param_search(X, y, scenario_fn, build_model, param_grid)
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     print("Best LOF params:", best_params)
 
     all_results = []
@@ -151,6 +152,7 @@ def run_LOF(X, y, k, scenario_fn):
 
         y_pred_raw = model.predict(X_test_red)
         y_pred = np.where(y_pred_raw == -1, 1, 0)
+        print("Model prediction complete for fold", fold_idx)
 
         all_results.append(
             (fold_idx, test_idx, y_pred, y_test, model,
@@ -165,14 +167,18 @@ def run_LOF(X, y, k, scenario_fn):
 # ----------------------------------------------------------------------
 def run_binary_svm(X, y, k, scenario_fn):
 
-    best_params = {'C': 10.0, 'gamma': 'scale'}
-    all_results = []
+    param_grid = {'C': [10], 'gamma': ['scale']}
+    def build_model(params): 
+        return SVC(**params)
 
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+
+    all_results = []
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, k):
 
         X_train = X.iloc[train_idx].values
         X_test  = X.iloc[test_idx].values
-        y_train = y.iloc[train_idx]
+        y_train = y.iloc[train_idx].values
         y_test  = y.iloc[test_idx].values
 
         (f_out, fe_time, fe_mem) = measure_feature_step(
@@ -186,7 +192,7 @@ def run_binary_svm(X, y, k, scenario_fn):
         )
 
         y_pred = model.predict(X_test_red)
-
+        print("Model prediction complete for fold", fold_idx)
         all_results.append(
             (fold_idx, attack_id, test_idx, y_pred, y_test, model,
              fe_time, fe_mem, clf_time, clf_mem)
@@ -204,7 +210,7 @@ def run_knn(X, y, k, scenario_fn):
     def build_model(params): 
         return KNeighborsClassifier(**params)
 
-    best_params, _ = optimal_param_search(X, y, lambda X, y: scenario_fn(X, y), build_model, param_grid)
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     print("Best kNN params:", best_params)
 
     all_results = []
@@ -227,7 +233,7 @@ def run_knn(X, y, k, scenario_fn):
         )
 
         y_pred = model.predict(X_test_red)
-
+        print("Model prediction complete for fold", fold_idx)
         all_results.append(
             (fold_idx, attack_id, test_idx, y_pred, y_test, model,
              fe_time, fe_mem, clf_time, clf_mem)
@@ -245,7 +251,7 @@ def run_random_forest(X, y, k, scenario_fn):
     def build_model(params): 
         return RandomForestClassifier(**params, random_state=42, n_jobs=-1)
 
-    best_params, _ = optimal_param_search(X, y, lambda X, y: scenario_fn(X, y), build_model, param_grid)
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     print("Best RF params:", best_params)
 
     all_results = []
@@ -268,7 +274,7 @@ def run_random_forest(X, y, k, scenario_fn):
         )
 
         y_pred = model.predict(X_test_red)
-
+        print("Model prediction complete for fold", fold_idx)
         all_results.append(
             (fold_idx, attack_id, test_idx, y_pred, y_test, model,
              fe_time, fe_mem, clf_time, clf_mem)

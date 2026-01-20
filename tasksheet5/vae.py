@@ -731,14 +731,14 @@ def hyperparameter_search_vae_recon(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, default="reconstruction",
+    parser.add_argument("--mode", type=str, default="classification",
                         choices=["reconstruction", "classification"],
                         help="Which decoder to train (Task 1).")
     parser.add_argument("--layer-type", type=str, default="dense",
                         choices=["dense", "conv1d", "lstm"])
     parser.add_argument("--activation", type=str, default="relu",
                         choices=["relu", "tanh", "leaky_relu"])
-    parser.add_argument("--latent-dim", type=int, default=8)
+    parser.add_argument("--latent-dim", type=int, default=50)
     parser.add_argument("--num-classes", type=int, default=2)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=128)
