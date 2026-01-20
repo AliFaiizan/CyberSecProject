@@ -19,7 +19,7 @@ def plot_comparative_metrics(scenario, base_dir="exports"):
     if scenario == 1:
         models = ["OCSVM", "LOF", "EllipticEnvelope"]
     else:
-        models = ["SVM", "kNN", "RandomForest", "CNN"]
+        models = ["SVM", "kNN", "RandomForest"]
 
     # Ensemble methods (actual files)
     ensemble_methods = ["random", "majority", "all"]
@@ -105,7 +105,7 @@ def plot_runtime_memory(scenario, base_dir="exports"):
     if scenario == 1:
         models = ["OCSVM", "LOF", "EllipticEnvelope"]
     else:
-        models = ["SVM", "kNN", "RandomForest", "CNN"]
+        models = ["SVM", "kNN", "RandomForest"]
 
     runtimes, memories, names = [], [], []
 
@@ -145,7 +145,7 @@ def plot_fold_performance(scenario, base_dir="exports"):
     if scenario == 1:
         models = ["OCSVM", "LOF", "EllipticEnvelope"]
     else:
-        models = ["SVM", "kNN", "RandomForest", "CNN"]
+        models = ["SVM", "kNN", "RandomForest"]
 
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
     axes = axes.flatten()
