@@ -5,6 +5,7 @@ from sklearn.svm import OneClassSVM, SVC
 from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor, KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.decomposition import PCA
 from utils import optimal_param_search
 
 process = psutil.Process()
@@ -44,7 +45,8 @@ def run_OneClassSVM(X, y, k, scenario_fn):
     def build_model(params): 
         return OneClassSVM(kernel="rbf", **params)
 
-    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    best_params = {'nu': 0.001, 'gamma': 'scale'}
     print("Best OCSVM params:", best_params)
 
     all_results = []
@@ -87,11 +89,12 @@ def run_EllipticEnvelope(X, y, k, scenario_fn):
     def build_model(params): 
         return EllipticEnvelope(**params, random_state=42)
 
-    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    best_params = {'contamination': 0.001, 'support_fraction': None}
     print("Best EE params:", best_params)
 
     all_results = []
-
+    pca = PCA(n_components=0.95)
     for fold_idx, train_idx, test_idx in scenario_fn(X, y, k):
 
         X_train = X.iloc[train_idx].values
@@ -102,13 +105,14 @@ def run_EllipticEnvelope(X, y, k, scenario_fn):
             lambda: identity_feature_extraction(X_train, X_test)
         )
         X_train_red, X_test_red = f_out
-
+        X_train_reduced = pca.fit_transform(X_train)
+        X_test_reduced = pca.transform(X_test)
         model = EllipticEnvelope(**best_params, random_state=42)
         (_, clf_time, clf_mem) = measure_classification_step(
-            lambda: model.fit(X_train_red)
+            lambda: model.fit(X_train_reduced)
         )
 
-        y_pred_raw = model.predict(X_test_red)
+        y_pred_raw = model.predict(X_test_reduced)
         print("Model prediction complete for fold", fold_idx)
         y_pred = np.where(y_pred_raw == -1, 1, 0)
 
@@ -129,9 +133,10 @@ def run_LOF(X, y, k, scenario_fn):
     def build_model(params): 
         return LocalOutlierFactor(novelty=True, **params)
 
-    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    best_params = {'n_neighbors': 10, 'metric': 'euclidean'}
     print("Best LOF params:", best_params)
-
+    
     all_results = []
 
     for fold_idx, train_idx, test_idx in scenario_fn(X, y, k):
@@ -171,8 +176,8 @@ def run_binary_svm(X, y, k, scenario_fn):
     def build_model(params): 
         return SVC(**params)
 
-    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
-
+    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    best_params = {'C': 10.0, 'gamma': 'scale'}
     all_results = []
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, k):
 
@@ -210,7 +215,8 @@ def run_knn(X, y, k, scenario_fn):
     def build_model(params): 
         return KNeighborsClassifier(**params)
 
-    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    best_params = {'n_neighbors': 3, 'weights': 'uniform', 'metric': 'euclidean'}
     print("Best kNN params:", best_params)
 
     all_results = []
@@ -251,7 +257,8 @@ def run_random_forest(X, y, k, scenario_fn):
     def build_model(params): 
         return RandomForestClassifier(**params, random_state=42, n_jobs=-1)
 
-    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+    best_params = {'n_estimators': 50, 'max_depth': 5, 'min_samples_split': 5}
     print("Best RF params:", best_params)
 
     all_results = []
