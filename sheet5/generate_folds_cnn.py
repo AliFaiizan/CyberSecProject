@@ -2,11 +2,11 @@
 """
 Generate fold data specifically for Task 1 CNN experiments
 This script ONLY generates RAW (unnormalized) data for CNN
-It does NOT interfere with VAE/latent feature generation
+
 
 Usage:
-  python generate_folds_for_cnn.py -sc 2 -k 5
-  python generate_folds_for_cnn.py -sc 3 -k 10
+  python generate_folds_cnn.py -sc 2 -k 5
+  python generate_folds_cnn.py -sc 3 -k 10
 """
 
 import argparse
@@ -17,7 +17,7 @@ import torch
 import pickle
 from glob import glob
 
-# Import necessary functions from your friend's code
+
 from gan import Generator
 from utils import load_data
 from scenarios import scenario_2_split, scenario_3_split
@@ -269,7 +269,7 @@ def main():
     test_files = sorted(glob("../datasets/hai-22.04/test1.csv"))
     
     if not train_files or not test_files:
-        print("\n❌ ERROR: HAI-22.04 dataset not found!")
+        print("\nERROR: HAI-22.04 dataset not found!")
         print("Expected location: ../datasets/hai-22.04/")
         return
 
@@ -280,7 +280,7 @@ def main():
     print(f"  Normal samples: {int(np.sum(y == 0))}")
     print(f"  Attack samples: {int(np.sum(y == 1))}")
     print(f"  Data range: [{X_raw.min():.2f}, {X_raw.max():.2f}]")
-    print(f"  ✓ This is RAW (unnormalized) data")
+    
 
     # Store min/max for clipping synthetic data
     real_min = X_raw.min(axis=0)
@@ -391,7 +391,7 @@ def main():
         if X_verify.max() > 10:
             print("  ✓ Data appears to be RAW (unnormalized)")
         else:
-            print("  ⚠️  Warning: Data might be normalized (unexpected)")
+            print(" Warning: Data might be normalized (unexpected)")
 
     print("\n" + "=" * 80)
     print("FOLD GENERATION COMPLETE!")
@@ -411,7 +411,7 @@ def main():
     
     print(f"\n✓ Ready for CNN training!")
     print(f"\nNext step:")
-    print(f"  python task1_cnn_experiments.py --scenario {sc} --k {k} --M 50 --data-type real")
+    print(f"  python run_cnn_task1.py --scenario {sc} --k {k} --M 50 --data-type real")
 
 
 if __name__ == "__main__":

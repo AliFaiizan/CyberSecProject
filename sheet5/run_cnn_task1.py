@@ -287,7 +287,7 @@ def run_cnn_experiment(scenario, k, M, data_type, window_size=20, stride=1, para
     if not os.path.exists(fold_base_dir):
         fold_base_dir = f"exports_sheet4/Scenario{scenario}"
         if not os.path.exists(fold_base_dir):
-            print(f"❌ ERROR: Fold directory not found!")
+            print(f"ERROR: Fold directory not found!")
             print(f"Tried: cnn_folds/Scenario{scenario} and exports_sheet4/Scenario{scenario}")
             return None
     
@@ -367,7 +367,7 @@ def run_cnn_experiment(scenario, k, M, data_type, window_size=20, stride=1, para
         all_f1s.append(f1)
         all_conf_matrices.append(cm)
         
-        print(f"\n📊 Fold {fold_idx + 1} Results:")
+        print(f"\n Fold {fold_idx + 1} Results:")
         print(f"  Precision: {precision:.4f}")
         print(f"  Recall:    {recall:.4f}")
         print(f"  F1-Score:  {f1:.4f}")
@@ -396,7 +396,7 @@ def run_cnn_experiment(scenario, k, M, data_type, window_size=20, stride=1, para
     }
     
     print("\n" + "="*80)
-    print("📊 OVERALL RESULTS")
+    print(" OVERALL RESULTS")
     print("="*80)
     print(f"Precision: {results['mean_precision']:.4f} ± {results['std_precision']:.4f}")
     print(f"Recall:    {results['mean_recall']:.4f} ± {results['std_recall']:.4f}")
@@ -456,7 +456,7 @@ def main():
     )
     
     if results is None:
-        print("\n❌ Experiment failed!")
+        print("\n Experiment failed!")
         return
     
     # Save results
@@ -466,7 +466,7 @@ def main():
     with open(output_file, 'w') as f:
         json.dump(results, f, indent=2)
     
-    print(f"\n✅ Results saved to: {output_file}")
+    print(f"\n Results saved to: {output_file}")
 
 
 if __name__ == "__main__":

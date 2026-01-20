@@ -17,7 +17,7 @@ def load_results(results_dir="task1_results"):
     results = []
     
     if not os.path.exists(results_dir):
-        print(f"❌ Results directory not found: {results_dir}")
+        print(f"Results directory not found: {results_dir}")
         return results
     
     for file in Path(results_dir).glob("*.json"):
@@ -25,7 +25,7 @@ def load_results(results_dir="task1_results"):
             data = json.load(f)
             results.append(data)
     
-    print(f"✅ Loaded {len(results)} result files")
+    print(f"Loaded {len(results)} result files")
     return results
 
 
@@ -105,7 +105,7 @@ def plot_results(results, output_dir="task1_results"):
     
     plt.tight_layout()
     plt.savefig(f"{output_dir}/task1_f1_comparison.png", dpi=300, bbox_inches='tight')
-    print(f"✅ Saved: {output_dir}/task1_f1_comparison.png")
+    print(f"Saved: {output_dir}/task1_f1_comparison.png")
     plt.close()
     
     # Plot: Precision vs Recall
@@ -148,7 +148,7 @@ def print_summary(results):
     print("="*80)
     
     best = max(results, key=lambda r: r['mean_f1'])
-    print(f"\n🏆 Best F1-Score:")
+    print(f"\n Best F1-Score:")
     print(f"   Scenario {best['scenario']}, k={best['k_folds']}, M={best['M']}, {best['data_type']}")
     print(f"   F1: {best['mean_f1']:.4f} ± {best['std_f1']:.4f}")
     
@@ -156,7 +156,7 @@ def print_summary(results):
     real_f1 = np.mean([r['mean_f1'] for r in results if r['data_type'] == 'real'])
     synth_f1 = np.mean([r['mean_f1'] for r in results if r['data_type'] == 'synthetic'])
     
-    print(f"\n📊 Average F1-Score:")
+    print(f"\n Average F1-Score:")
     print(f"   Real Data:      {real_f1:.4f}")
     print(f"   Synthetic Data: {synth_f1:.4f}")
     print(f"   Difference:     {abs(real_f1 - synth_f1):.4f}")
@@ -165,7 +165,7 @@ def print_summary(results):
     sc2_f1 = np.mean([r['mean_f1'] for r in results if r['scenario'] == 2])
     sc3_f1 = np.mean([r['mean_f1'] for r in results if r['scenario'] == 3])
     
-    print(f"\n📊 Average F1 by Scenario:")
+    print(f"\n Average F1 by Scenario:")
     print(f"   Scenario 2: {sc2_f1:.4f}")
     print(f"   Scenario 3: {sc3_f1:.4f}")
     
@@ -183,7 +183,7 @@ def main():
     results = load_results(args.results_dir)
     
     if not results:
-        print("❌ No results found!")
+        print(" No results found!")
         return
     
     print("\nGenerating plots...")
@@ -196,7 +196,7 @@ def main():
     df = create_summary_table(results)
     summary_file = f"{args.results_dir}/task1_summary.csv"
     df.to_csv(summary_file, index=False)
-    print(f"\n✅ Summary saved to: {summary_file}")
+    print(f"\n Summary saved to: {summary_file}")
     
     print("\n" + "="*80)
     print("VISUALIZATION COMPLETE!")
