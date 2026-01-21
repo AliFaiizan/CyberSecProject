@@ -280,7 +280,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Generate plots for ML experiments")
     parser.add_argument("--scenarios", type=int, nargs="+", default=[1, 2, 3],
-                        help="List of scenarios to plot (default: 1 2 3)")
+                        help="List of scenarios to plot --scenario <number>")
     parser.add_argument("--model", type=str, default=None,
                         help="Model base name for batch plots (e.g., OCSVM, LOF, etc.)")
     args = parser.parse_args()

@@ -45,8 +45,8 @@ def run_OneClassSVM(X, y, k, scenario_fn):
     def build_model(params): 
         return OneClassSVM(kernel="rbf", **params)
 
-    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
-    best_params = {'nu': 0.001, 'gamma': 'scale'}
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
+
     print("Best OCSVM params:", best_params)
 
     all_results = []
@@ -89,8 +89,7 @@ def run_EllipticEnvelope(X, y, k, scenario_fn):
     def build_model(params): 
         return EllipticEnvelope(**params, random_state=42)
 
-    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
-    best_params = {'contamination': 0.001, 'support_fraction': None}
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     print("Best EE params:", best_params)
 
     all_results = []
@@ -133,8 +132,7 @@ def run_LOF(X, y, k, scenario_fn):
     def build_model(params): 
         return LocalOutlierFactor(novelty=True, **params)
 
-    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
-    best_params = {'n_neighbors': 10, 'metric': 'euclidean'}
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     print("Best LOF params:", best_params)
     
     all_results = []
@@ -176,8 +174,7 @@ def run_binary_svm(X, y, k, scenario_fn):
     def build_model(params): 
         return SVC(**params)
 
-    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
-    best_params = {'C': 10.0, 'gamma': 'scale'}
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     all_results = []
     for fold_idx, attack_id, train_idx, test_idx in scenario_fn(X, y, k):
 
@@ -215,8 +212,7 @@ def run_knn(X, y, k, scenario_fn):
     def build_model(params): 
         return KNeighborsClassifier(**params)
 
-    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
-    best_params = {'n_neighbors': 3, 'weights': 'uniform', 'metric': 'euclidean'}
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     print("Best kNN params:", best_params)
 
     all_results = []
@@ -257,8 +253,7 @@ def run_random_forest(X, y, k, scenario_fn):
     def build_model(params): 
         return RandomForestClassifier(**params, random_state=42, n_jobs=-1)
 
-    #best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
-    best_params = {'n_estimators': 50, 'max_depth': 5, 'min_samples_split': 5}
+    best_params, _ = optimal_param_search(X, y,k, scenario_fn, build_model, param_grid)
     print("Best RF params:", best_params)
 
     all_results = []
