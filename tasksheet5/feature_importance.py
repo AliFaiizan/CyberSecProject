@@ -76,6 +76,36 @@ def plot_importance(importances, feature_names, title, out_file):
 
 
 # ---------------------------------------------------------
+# Save importance to CSV
+# ---------------------------------------------------------
+def save_importance_csv(importances, feature_names, model_name, scenario, std_importance=None, out_dir="feature_importance"):
+    """Save sorted feature importance to CSV file"""
+    # Sort by importance descending
+    idx = np.argsort(importances)[::-1]
+    
+    data = {
+        'Feature': feature_names[idx],
+        'Importance': importances[idx],
+        'Rank': np.arange(1, len(importances) + 1)
+    }
+    
+    # Add std if provided
+    if std_importance is not None:
+        data['Std_Dev'] = std_importance[idx]
+    
+    df = pd.DataFrame(data)
+    
+    # Create output directory
+    out_subdir = f"{out_dir}/Scenario{scenario}"
+    os.makedirs(out_subdir, exist_ok=True)
+    
+    # Save aggregated importance
+    out_file = f"{out_subdir}/{model_name}_aggregated_importance.csv"
+    df.to_csv(out_file, index=False)
+    print(f"  [SAVED] {out_file}")
+
+
+# ---------------------------------------------------------
 # Compute feature importance
 # ---------------------------------------------------------
 def compute_importance(model, X_test, y_test, model_name, scenario):
@@ -179,7 +209,7 @@ def run_task2a(scenario, latent_file=None, M=20):
     print(f"Processing {len(models)} models across 5 folds...\n")
     
     # Iterate through folds
-    for split in scenario_fn(pd.DataFrame(Z), pd.Series(y_window), k=5):
+    for split in scenario_fn(pd.DataFrame(Z), pd.Series(y_window), k=2):
         
         # Unpack split based on scenario
         if scenario == 1:
@@ -259,6 +289,10 @@ def run_task2a(scenario, latent_file=None, M=20):
         plt.close()
         
         print(f"  [SAVED] {out_file}")
+        
+        # Save to CSV
+        save_importance_csv(mean_importance, feature_names, model_name, scenario, 
+                           std_importance=std_importance, out_dir=out_dir)
         
         # Print top features
         print(f"\n  {model_name} - Top 3 Most Important Features:")
