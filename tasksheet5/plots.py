@@ -10,6 +10,48 @@ plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_palette("husl")
 
 
+
+def plot_batch_metrics(scenario_dir, model_base):
+    """
+    Plot precision and recall for each batch (e.g., OCSVM_4, OCSVM_8, ...) for a given model.
+    """
+    # Find all batch folders for this model (e.g., OCSVM_4, OCSVM_8, ...)
+    batch_dirs = [d for d in os.listdir(scenario_dir) if d.startswith(model_base + "_")]
+    batch_dirs = sorted(batch_dirs, key=lambda x: int(x.split("_")[-1]))  # sort by feature count
+
+    num_features = []
+    precisions = []
+    recalls = []
+
+    for batch in batch_dirs:
+        batch_path = os.path.join(scenario_dir, batch)
+        metrics_file = os.path.join(batch_path, "metrics_summary.csv")
+        if not os.path.exists(metrics_file):
+            continue
+        df = pd.read_csv(metrics_file)
+        num_feat = int(batch.split("_")[-1])
+        num_features.append(num_feat)
+        precisions.append(df["precision"].mean())
+        recalls.append(df["recall"].mean())
+
+    # Plot
+    x = np.arange(len(num_features))
+    width = 0.35
+
+    plt.figure(figsize=(8, 5))
+    plt.bar(x - width/2, precisions, width, label='Precision', color='skyblue')
+    plt.bar(x + width/2, recalls, width, label='Recall', color='salmon')
+    plt.xticks(x, num_features)
+    plt.xlabel('Number of Features')
+    plt.ylabel('Score')
+    plt.title(f"{model_base} — Precision & Recall vs Number of Features")
+    plt.ylim(0, 1.05)
+    plt.legend()
+    plt.tight_layout()
+    out_file = os.path.join(scenario_dir, f"{model_base}_batch_precision_recall.png")
+    plt.savefig(out_file, dpi=300)
+    plt.close()
+    print(f"[SAVED] {out_file}")
 # ==========================================================================================
 # 1) BAR PLOT: PRECISION & RECALL PER MODEL
 # ==========================================================================================
@@ -217,14 +259,15 @@ def plot_ensemble_comparison(scenario, base_dir="exports"):
 # ==========================================================================================
 # MASTER WRAPPER
 # ==========================================================================================
-def generate_all_plots(scenarios=[1, 2, 3], base_dir="exports"):
+def generate_all_plots(scenarios=[1, 2, 3], model=None, base_dir="exports"):
 
     for sc in scenarios:
         print(f"\n=== Generating Scenario {sc} Plots ===")
-        plot_comparative_metrics(sc, base_dir)
+        # plot_comparative_metrics(sc, base_dir)
         #plot_runtime_memory(sc, base_dir)
-        plot_fold_performance(sc, base_dir)
-        plot_ensemble_comparison(sc, base_dir)
+        # plot_fold_performance(sc, base_dir)
+        # plot_ensemble_comparison(sc, base_dir)
+        plot_batch_metrics(f"{base_dir}/Scenario{sc}", model)
 
     print("\nAll plots generated successfully!")
 
@@ -233,4 +276,12 @@ def generate_all_plots(scenarios=[1, 2, 3], base_dir="exports"):
 # MAIN
 # ==========================================================================================
 if __name__ == "__main__":
-    generate_all_plots([1, 2, 3])
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate plots for ML experiments")
+    parser.add_argument("--scenarios", type=int, nargs="+", default=[1, 2, 3],
+                        help="List of scenarios to plot (default: 1 2 3)")
+    parser.add_argument("--model", type=str, default=None,
+                        help="Model base name for batch plots (e.g., OCSVM, LOF, etc.)")
+    args = parser.parse_args()
+    generate_all_plots(args.scenarios, args.model)

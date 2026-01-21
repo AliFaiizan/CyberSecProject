@@ -261,3 +261,22 @@ def create_windows_for_vae(
         return X_windows, None
     else:
         return X_windows, np.array(y_windows, dtype=int)
+
+def load_feature_ranking(csv_path):
+    """
+    Loads a feature ranking from an aggregated importance CSV.
+    Expected format: first col = feature name (e.g., z18), second col = importance score.
+    """
+    df = pd.read_csv(csv_path)
+
+    if df.shape[1] < 2:
+        raise ValueError(f"Importance CSV must have at least 2 columns: {csv_path}")
+
+    feature_col = df.columns[0]
+    score_col   = df.columns[1]
+
+    df = df[[feature_col, score_col]].dropna()
+    df[score_col] = pd.to_numeric(df[score_col], errors="coerce")
+    df = df.dropna(subset=[score_col]).sort_values(score_col, ascending=False)
+
+    return df[feature_col].astype(str).tolist()
