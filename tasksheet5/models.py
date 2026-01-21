@@ -93,7 +93,7 @@ def run_EllipticEnvelope(X, y, k, scenario_fn):
     print("Best EE params:", best_params)
 
     all_results = []
-    pca = PCA(n_components=0.95)
+
     for fold_idx, train_idx, test_idx in scenario_fn(X, y, k):
 
         X_train = X.iloc[train_idx].values
@@ -104,14 +104,13 @@ def run_EllipticEnvelope(X, y, k, scenario_fn):
             lambda: identity_feature_extraction(X_train, X_test)
         )
         X_train_red, X_test_red = f_out
-        X_train_reduced = pca.fit_transform(X_train)
-        X_test_reduced = pca.transform(X_test)
+
         model = EllipticEnvelope(**best_params, random_state=42)
         (_, clf_time, clf_mem) = measure_classification_step(
-            lambda: model.fit(X_train_reduced)
+            lambda: model.fit(X_train_red)
         )
 
-        y_pred_raw = model.predict(X_test_reduced)
+        y_pred_raw = model.predict(X_test_red)
         print("Model prediction complete for fold", fold_idx)
         y_pred = np.where(y_pred_raw == -1, 1, 0)
 

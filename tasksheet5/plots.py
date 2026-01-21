@@ -16,7 +16,9 @@ def plot_batch_metrics(scenario_dir, model_base):
     Plot precision and recall for each batch (e.g., OCSVM_4, OCSVM_8, ...) for a given model.
     """
     # Find all batch folders for this model (e.g., OCSVM_4, OCSVM_8, ...)
-    batch_dirs = [d for d in os.listdir(scenario_dir) if d.startswith(model_base + "_")]
+    # Filter to only include directories, not files
+    batch_dirs = [d for d in os.listdir(scenario_dir) 
+                  if d.startswith(model_base + "_") and os.path.isdir(os.path.join(scenario_dir, d))]
     batch_dirs = sorted(batch_dirs, key=lambda x: int(x.split("_")[-1]))  # sort by feature count
 
     num_features = []
@@ -263,11 +265,12 @@ def generate_all_plots(scenarios=[1, 2, 3], model=None, base_dir="exports"):
 
     for sc in scenarios:
         print(f"\n=== Generating Scenario {sc} Plots ===")
-        # plot_comparative_metrics(sc, base_dir)
+        plot_comparative_metrics(sc, base_dir)
         #plot_runtime_memory(sc, base_dir)
-        # plot_fold_performance(sc, base_dir)
-        # plot_ensemble_comparison(sc, base_dir)
-        plot_batch_metrics(f"{base_dir}/Scenario{sc}", model)
+        plot_fold_performance(sc, base_dir)
+        plot_ensemble_comparison(sc, base_dir)
+        if model is not None:
+            plot_batch_metrics(f"{base_dir}/Scenario{sc}", model,)
 
     print("\nAll plots generated successfully!")
 
@@ -278,10 +281,10 @@ def generate_all_plots(scenarios=[1, 2, 3], model=None, base_dir="exports"):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Generate plots for ML experiments")
+    parser = argparse.ArgumentParser(description="Generate plots for ML experiments" )
     parser.add_argument("--scenarios", type=int, nargs="+", default=[1, 2, 3],
                         help="List of scenarios to plot --scenario <number>")
     parser.add_argument("--model", type=str, default=None,
-                        help="Model base name for batch plots (e.g., OCSVM, LOF, etc.)")
+                        help="Model base name for batch plots (OCSVM, LOF, EllipticEnvelope,SVM, kNN, RandomForest) batch prediction need to be present in the scenario folder")
     args = parser.parse_args()
     generate_all_plots(args.scenarios, args.model)
